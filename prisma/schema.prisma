@@ -1,0 +1,52 @@
+// 寿司屋 廃棄管理システム - Prisma スキーマ
+// SQLite を利用（ローカル/小規模運用に十分）
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// メニューのジャンル（にぎり / ロール など）。入力タブのサブタブに対応。
+model Category {
+  id        String     @id @default(cuid())
+  slug      String     @unique // nigiri, roll, gunkan ...
+  name      String // 表示名（にぎり など）
+  sortOrder Int        @default(0)
+  items     MenuItem[]
+  createdAt DateTime   @default(now())
+}
+
+/// 個々のメニュー（マグロ、サーモン など）
+model MenuItem {
+  id         String       @id @default(cuid())
+  name       String
+  priceAud   Float        @default(5) // 単価（AUD）。廃棄額 = quantity × priceAud
+  categoryId String
+  category   Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sortOrder  Int          @default(0)
+  active     Boolean      @default(true)
+  entries    WasteEntry[]
+  createdAt  DateTime     @default(now())
+
+  @@index([categoryId])
+}
+
+/// 2時間ごとの廃棄数入力レコード（生データ）
+/// slot は営業時間帯の開始時刻(hour)。例: 10,12,14,16,18,20
+model WasteEntry {
+  id         String   @id @default(cuid())
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  date       String // YYYY-MM-DD（店舗ローカル日付）
+  slot       Int // 2時間スロットの開始時刻(hour)
+  quantity   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([menuItemId, date, slot])
+  @@index([date])
+}
