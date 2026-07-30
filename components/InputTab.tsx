@@ -103,10 +103,12 @@ export default function InputTab() {
     setError("");
     try {
       const entries = menu.flatMap((c) =>
-        c.items.map((it) => ({
-          menuItemId: it.id,
-          quantity: quantities[it.id] ?? 0,
-        })),
+        c.items
+          .filter((it) => isChanged(it.id))
+          .map((it) => ({
+            menuItemId: it.id,
+            quantity: quantities[it.id] ?? 0,
+          })),
       );
       await saveEntries({ date, slot, entries });
       setMessage("保存しました");
