@@ -111,10 +111,9 @@ export default function InputTab() {
           })),
       );
       await saveEntries({ date, slot, entries });
+      setSavedQuantities(quantities);
       setMessage("保存しました");
       setTimeout(() => setMessage(""), 2500);
-      const res = await fetchEntries(date, slot);
-      applyServerEntries(res.entries);
     } catch (e) {
       setError(String(e));
     } finally {
