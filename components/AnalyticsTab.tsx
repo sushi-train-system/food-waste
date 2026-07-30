@@ -36,8 +36,6 @@ export default function AnalyticsTab() {
   const [weekdayMode, setWeekdayMode] = useState<"avg" | "total">("avg");
 
   useEffect(() => {
-    setLoading(true);
-    setError("");
     fetchAnalytics(rangeFor(preset))
       .then(setData)
       .catch((e) => setError(String(e)))
@@ -113,7 +111,7 @@ export default function AnalyticsTab() {
                       tickFormatter={(v) => `$${v}`}
                     />
                     <Tooltip
-                      formatter={(v, _n, p) => [
+                      formatter={(v) => [
                         formatAud(Number(v)),
                         weekdayMode === "avg" ? "1日平均" : "合計",
                       ]}

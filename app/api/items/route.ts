@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_PRICE_AUD } from "@/lib/config";
+import { getDefaultStore } from "@/lib/store";
 
 // メニュー作成 body: { categoryId, name, priceAud? }
 export async function POST(request: Request) {
+  const store = await getDefaultStore();
   let body: { categoryId?: string; name?: string; priceAud?: number };
   try {
     body = await request.json();
@@ -18,21 +20,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const category = await prisma.category.findUnique({
-    where: { id: categoryId },
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, storeId: store.id },
   });
   if (!category) {
     return Response.json({ error: "category not found" }, { status: 404 });
   }
 
   const max = await prisma.menuItem.aggregate({
-    where: { categoryId },
+    where: { storeId: store.id, categoryId },
     _max: { sortOrder: true },
   });
   const sortOrder = (max._max.sortOrder ?? -1) + 1;
 
   const item = await prisma.menuItem.create({
     data: {
+      storeId: store.id,
       name,
       categoryId,
       sortOrder,

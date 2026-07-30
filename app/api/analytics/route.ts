@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { WEEKDAY_LABELS, weekdayIndexFromDate } from "@/lib/config";
+import { getDefaultStore } from "@/lib/store";
 import type {
   AnalyticsResponse,
   CategoryBreakdown,
@@ -13,6 +14,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // GET /api/analytics?start=YYYY-MM-DD&end=YYYY-MM-DD&category=slug
 export async function GET(request: Request) {
+  const store = await getDefaultStore();
   const { searchParams } = new URL(request.url);
   const start = searchParams.get("start");
   const end = searchParams.get("end");
@@ -24,6 +26,7 @@ export async function GET(request: Request) {
 
   const rows = await prisma.wasteEntry.findMany({
     where: {
+      storeId: store.id,
       ...(Object.keys(dateFilter).length ? { date: dateFilter } : {}),
       ...(categorySlug
         ? { menuItem: { category: { slug: categorySlug } } }

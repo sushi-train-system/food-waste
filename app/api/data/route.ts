@@ -1,9 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { weekdayIndexFromDate } from "@/lib/config";
+import { getDefaultStore } from "@/lib/store";
 import type {
-  CategoryBreakdownDaily,
   DailyRow,
-  ItemBreakdown,
   RawRow,
 } from "@/lib/types";
 
@@ -12,6 +11,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // GET /api/data?view=raw|daily&start=YYYY-MM-DD&end=YYYY-MM-DD
 export async function GET(request: Request) {
+  const store = await getDefaultStore();
   const { searchParams } = new URL(request.url);
   const view = searchParams.get("view") === "daily" ? "daily" : "raw";
   const start = searchParams.get("start");
@@ -22,7 +22,10 @@ export async function GET(request: Request) {
   if (end && DATE_RE.test(end)) dateFilter.lte = end;
 
   const rows = await prisma.wasteEntry.findMany({
-    where: Object.keys(dateFilter).length ? { date: dateFilter } : {},
+    where: {
+      storeId: store.id,
+      ...(Object.keys(dateFilter).length ? { date: dateFilter } : {}),
+    },
     select: {
       date: true,
       slot: true,

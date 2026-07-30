@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { TIME_SLOTS } from "@/lib/config";
+import { getDefaultStore } from "@/lib/store";
 import type { EntryDTO, SaveEntriesBody } from "@/lib/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -7,6 +8,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // 指定した日付・スロットの入力値を返す
 // GET /api/entries?date=YYYY-MM-DD&slot=10
 export async function GET(request: Request) {
+  const store = await getDefaultStore();
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
   const slotParam = searchParams.get("slot");
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
   }
 
   const rows = await prisma.wasteEntry.findMany({
-    where: { date, slot },
+    where: { storeId: store.id, date, slot },
     select: { menuItemId: true, quantity: true },
   });
 
@@ -35,6 +37,7 @@ export async function GET(request: Request) {
 // 入力値を一括保存（upsert）。quantity=0 は削除。
 // POST /api/entries  body: { date, slot, entries: [{menuItemId, quantity}] }
 export async function POST(request: Request) {
+  const store = await getDefaultStore();
   let body: SaveEntriesBody;
   try {
     body = (await request.json()) as SaveEntriesBody;
@@ -53,23 +56,42 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid entries" }, { status: 400 });
   }
 
-  const ops = entries.map((e) => {
+  const menuItemIds = entries.map((e) => e.menuItemId);
+  const validItems = await prisma.menuItem.findMany({
+    where: { storeId: store.id, id: { in: menuItemIds } },
+    select: { id: true },
+  });
+  const validItemIds = new Set(validItems.map((i) => i.id));
+
+  const ops = entries.flatMap((e) => {
+    if (!validItemIds.has(e.menuItemId)) return [];
     const quantity = Math.max(0, Math.floor(Number(e.quantity) || 0));
     if (quantity <= 0) {
       return prisma.wasteEntry.deleteMany({
-        where: { menuItemId: e.menuItemId, date, slot },
+        where: { storeId: store.id, menuItemId: e.menuItemId, date, slot },
       });
     }
     return prisma.wasteEntry.upsert({
       where: {
-        menuItemId_date_slot: { menuItemId: e.menuItemId, date, slot },
+        storeId_menuItemId_date_slot: {
+          storeId: store.id,
+          menuItemId: e.menuItemId,
+          date,
+          slot,
+        },
       },
       update: { quantity },
-      create: { menuItemId: e.menuItemId, date, slot, quantity },
+      create: {
+        storeId: store.id,
+        menuItemId: e.menuItemId,
+        date,
+        slot,
+        quantity,
+      },
     });
   });
 
   await prisma.$transaction(ops);
 
-  return Response.json({ ok: true, saved: entries.length });
+  return Response.json({ ok: true, saved: ops.length });
 }

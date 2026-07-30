@@ -17,9 +17,6 @@ export default function DataTab() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setLoading(true);
-    setError("");
-    setSelectedCat(null);
     fetchData(view, {})
       .then((res) => {
         if (view === "raw") {
@@ -101,7 +98,13 @@ export default function DataTab() {
             <TabBtn active={view === "raw"} onClick={() => setView("raw")}>
               2時間ごと
             </TabBtn>
-            <TabBtn active={view === "daily"} onClick={() => setView("daily")}>
+            <TabBtn
+              active={view === "daily"}
+              onClick={() => {
+                setSelectedCat(null);
+                setView("daily");
+              }}
+            >
               日次集計
             </TabBtn>
           </div>

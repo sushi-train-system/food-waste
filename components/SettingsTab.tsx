@@ -20,7 +20,6 @@ export default function SettingsTab() {
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
-    setError("");
     try {
       setCats(await fetchAdminCategories());
     } catch (e) {
@@ -29,8 +28,11 @@ export default function SettingsTab() {
   }, []);
 
   useEffect(() => {
-    reload().finally(() => setLoading(false));
-  }, [reload]);
+    fetchAdminCategories()
+      .then(setCats)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
+  }, []);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);

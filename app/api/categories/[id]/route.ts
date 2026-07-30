@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import { getDefaultStore } from "@/lib/store";
 
 // カテゴリ更新 body: { name?, sortOrder? }
 export async function PATCH(
   request: Request,
   ctx: RouteContext<"/api/categories/[id]">,
 ) {
+  const store = await getDefaultStore();
   const { id } = await ctx.params;
   let body: { name?: string; sortOrder?: number };
   try {
@@ -24,6 +26,13 @@ export async function PATCH(
     return Response.json({ error: "nothing to update" }, { status: 400 });
   }
 
+  const existing = await prisma.category.findFirst({
+    where: { id, storeId: store.id },
+  });
+  if (!existing) {
+    return Response.json({ error: "category not found" }, { status: 404 });
+  }
+
   const updated = await prisma.category.update({ where: { id }, data });
   return Response.json(updated);
 }
@@ -33,7 +42,13 @@ export async function DELETE(
   _request: Request,
   ctx: RouteContext<"/api/categories/[id]">,
 ) {
+  const store = await getDefaultStore();
   const { id } = await ctx.params;
-  await prisma.category.delete({ where: { id } });
+  const result = await prisma.category.deleteMany({
+    where: { id, storeId: store.id },
+  });
+  if (result.count === 0) {
+    return Response.json({ error: "category not found" }, { status: 404 });
+  }
   return Response.json({ ok: true });
 }

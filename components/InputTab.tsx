@@ -59,7 +59,6 @@ export default function InputTab() {
 
   const loadEntries = useCallback(() => {
     if (menu.length === 0) return;
-    setMessage("");
     fetchEntries(date, slot)
       .then((res) => applyServerEntries(res.entries))
       .catch((e) => setError(String(e)));

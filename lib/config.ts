@@ -74,6 +74,12 @@ export function recentRange(
 /// デフォルト単価（AUD）
 export const DEFAULT_PRICE_AUD = 5;
 
+/// 試験運用で使うデフォルト店舗。将来はログイン中ユーザーや店舗選択から決める。
+export const DEFAULT_STORE_SLUG = process.env.DEFAULT_STORE_SLUG ?? "main";
+export const DEFAULT_STORE_NAME = process.env.DEFAULT_STORE_NAME ?? "Main Store";
+export const DEFAULT_STORE_TIMEZONE =
+  process.env.DEFAULT_STORE_TIMEZONE ?? "Australia/Brisbane";
+
 /// AUD 金額の表示（例: $12.50）
 export function formatAud(amount: number): string {
   return `$${amount.toFixed(2)}`;
