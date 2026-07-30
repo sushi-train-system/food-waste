@@ -98,6 +98,7 @@ export default function InputTab() {
   };
 
   const handleSave = async () => {
+    if (changedCount === 0) return;
     setSaving(true);
     setMessage("");
     setError("");
@@ -247,8 +248,12 @@ export default function InputTab() {
       <div className="fixed bottom-16 inset-x-0 z-20 px-4 py-3 bg-gradient-to-t from-stone-100 via-stone-100 to-transparent">
         <button
           onClick={handleSave}
-          disabled={saving}
-          className="w-full rounded-xl bg-rose-800 py-3.5 text-center text-base font-bold text-white shadow-lg active:bg-rose-900 disabled:opacity-60"
+          disabled={saving || changedCount === 0}
+          className={`w-full rounded-xl py-3.5 text-center text-base font-bold shadow-lg disabled:opacity-80 ${
+            changedCount > 0
+              ? "bg-rose-800 text-white active:bg-rose-900"
+              : "bg-stone-300 text-stone-600"
+          }`}
         >
           {saving
             ? "保存中…"
@@ -256,7 +261,7 @@ export default function InputTab() {
               ? message
               : changedCount > 0
                 ? `保存（${changedCount}件変更 / 合計 ${grandTotal} 個）`
-                : `この時間帯を保存（合計 ${grandTotal} 個）`}
+                : `変更なし（合計 ${grandTotal} 個）`}
         </button>
       </div>
     </div>
