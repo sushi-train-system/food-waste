@@ -1,16 +1,110 @@
 import { prisma } from "@/lib/prisma";
-import { WEEKDAY_LABELS, weekdayIndexFromDate } from "@/lib/config";
+import { todayStr, WEEKDAY_LABELS, weekdayIndexFromDate } from "@/lib/config";
 import { getDefaultStore } from "@/lib/store";
 import type {
   AnalyticsResponse,
   CategoryBreakdown,
   MonthlyPoint,
+  SameMonthComparison,
   WeekdayPoint,
   YearlyPoint,
 } from "@/lib/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function sameMonth(start: string | null, end: string | null) {
+  if (!start || !end || !DATE_RE.test(start) || !DATE_RE.test(end)) return null;
+  const month = start.slice(0, 7);
+  return end.startsWith(month) ? month : null;
+}
+
+function previousYearMonth(month: string) {
+  const year = Number(month.slice(0, 4)) - 1;
+  return `${year}-${month.slice(5)}`;
+}
+
+function monthRange(month: string) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const lastDay = new Date(year, monthIndex, 0).getDate();
+  return {
+    start: `${month}-01`,
+    end: `${month}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+function changePct(current: number, previous: number) {
+  if (previous === 0) return null;
+  return round2(((current - previous) / previous) * 100);
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function dateFromString(date: string) {
+  return new Date(`${date}T00:00:00.000Z`);
+}
+
+function dateString(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function minDateString(a: string, b: string) {
+  return a <= b ? a : b;
+}
+
+function weekdayDayCounts(start: string | null, end: string | null) {
+  const counts = new Array(7).fill(0) as number[];
+  if (!start || !end || !DATE_RE.test(start) || !DATE_RE.test(end)) {
+    return counts;
+  }
+
+  const today = todayStr();
+  const effectiveEnd = minDateString(end, today);
+  if (effectiveEnd < start) return counts;
+
+  for (
+    let cursor = dateFromString(start);
+    dateString(cursor) <= effectiveEnd;
+    cursor = addDays(cursor, 1)
+  ) {
+    counts[weekdayIndexFromDate(dateString(cursor))]++;
+  }
+  return counts;
+}
+
+async function aggregateMonth(
+  storeId: string,
+  month: string,
+  categorySlug: string | null,
+): Promise<MonthlyPoint> {
+  const range = monthRange(month);
+  const rows = await prisma.wasteEntry.findMany({
+    where: {
+      storeId,
+      date: { gte: range.start, lte: range.end },
+      ...(categorySlug
+        ? { menuItem: { category: { slug: categorySlug } } }
+        : {}),
+    },
+    select: {
+      quantity: true,
+      menuItem: { select: { priceAud: true } },
+    },
+  });
+
+  let total = 0;
+  let amount = 0;
+  for (const row of rows) {
+    total += row.quantity;
+    amount += row.quantity * row.menuItem.priceAud;
+  }
+
+  return { period: month, total, amount: round2(amount) };
+}
 
 // GET /api/analytics?start=YYYY-MM-DD&end=YYYY-MM-DD&category=slug
 export async function GET(request: Request) {
@@ -19,6 +113,7 @@ export async function GET(request: Request) {
   const start = searchParams.get("start");
   const end = searchParams.get("end");
   const categorySlug = searchParams.get("category");
+  const selectedMonth = sameMonth(start, end);
 
   const dateFilter: { gte?: string; lte?: string } = {};
   if (start && DATE_RE.test(start)) dateFilter.gte = start;
@@ -49,10 +144,6 @@ export async function GET(request: Request) {
   const yearlyMap = new Map<string, { qty: number; amt: number }>();
   const weekdayTotals = new Array(7).fill(0) as number[];
   const weekdayAmounts = new Array(7).fill(0) as number[];
-  const weekdayDays: Array<Set<string>> = Array.from(
-    { length: 7 },
-    () => new Set<string>(),
-  );
   const categoryMap = new Map<string, { qty: number; amt: number }>();
 
   let totalCount = 0;
@@ -82,7 +173,6 @@ export async function GET(request: Request) {
     const wd = weekdayIndexFromDate(r.date);
     weekdayTotals[wd] += q;
     weekdayAmounts[wd] += amt;
-    weekdayDays[wd].add(r.date);
 
     const catName = r.menuItem.category.name;
     const c = categoryMap.get(catName) ?? { qty: 0, amt: 0 };
@@ -110,9 +200,13 @@ export async function GET(request: Request) {
       amount: round2(v.amt),
     }));
 
+  const averageStart = dateFilter.gte ?? rangeStart;
+  const averageEnd = dateFilter.lte ?? rangeEnd;
+  const weekdayDays = weekdayDayCounts(averageStart, averageEnd);
+
   const order = [1, 2, 3, 4, 5, 6, 0];
   const weekday: WeekdayPoint[] = order.map((wd) => {
-    const days = weekdayDays[wd].size;
+    const days = weekdayDays[wd];
     const total = weekdayTotals[wd];
     const amount = round2(weekdayAmounts[wd]);
     return {
@@ -134,11 +228,32 @@ export async function GET(request: Request) {
       amount: round2(v.amt),
     }));
 
+  let sameMonthComparison: SameMonthComparison | null = null;
+  if (selectedMonth) {
+    const previousMonth = previousYearMonth(selectedMonth);
+    const current =
+      monthly.find((m) => m.period === selectedMonth) ?? {
+        period: selectedMonth,
+        total: 0,
+        amount: 0,
+      };
+    const previous = await aggregateMonth(store.id, previousMonth, categorySlug);
+    sameMonthComparison = {
+      current,
+      previous,
+      diffTotal: current.total - previous.total,
+      diffAmount: round2(current.amount - previous.amount),
+      totalChangePct: changePct(current.total, previous.total),
+      amountChangePct: changePct(current.amount, previous.amount),
+    };
+  }
+
   const response: AnalyticsResponse = {
     monthly,
     yearly,
     weekday,
     byCategory,
+    sameMonthComparison,
     totalCount,
     totalAmount: round2(totalAmount),
     rangeStart,

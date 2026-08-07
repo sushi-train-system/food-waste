@@ -104,11 +104,21 @@ export type CategoryBreakdown = {
   amount: number;
 };
 
+export type SameMonthComparison = {
+  current: MonthlyPoint;
+  previous: MonthlyPoint;
+  diffTotal: number;
+  diffAmount: number;
+  totalChangePct: number | null;
+  amountChangePct: number | null;
+};
+
 export type AnalyticsResponse = {
   monthly: MonthlyPoint[];
   yearly: YearlyPoint[];
   weekday: WeekdayPoint[];
   byCategory: CategoryBreakdown[];
+  sameMonthComparison: SameMonthComparison | null;
   totalCount: number;
   totalAmount: number;
   rangeStart: string | null;
