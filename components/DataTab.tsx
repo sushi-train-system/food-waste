@@ -74,7 +74,7 @@ export default function DataTab() {
       })
       .join("\n");
     if (rows.length > 0) {
-      csv += `\n${["総計", "", "", "", totalQuantity, "", totalAmount]
+      csv += `\n${["Total", "", "", "", totalQuantity, "", totalAmount]
         .map(csvCell)
         .join(",")}`;
     }
