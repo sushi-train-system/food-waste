@@ -11,53 +11,88 @@ import {
   YAxis,
 } from "recharts";
 import { fetchAnalytics } from "@/lib/api";
-import { formatAud, monthRange, yearRange } from "@/lib/config";
+import { formatAud, todayStr, yearRange } from "@/lib/config";
 import type { AnalyticsResponse } from "@/lib/types";
 
 type RangePreset = "month" | "year" | "all";
 
 const PRESETS: { key: RangePreset; label: string }[] = [
-  { key: "month", label: "今月" },
+  { key: "month", label: "月別" },
   { key: "year", label: "今年" },
   { key: "all", label: "全期間" },
 ];
 
-function rangeFor(preset: RangePreset): { start?: string; end?: string } {
-  if (preset === "month") return monthRange();
+function monthValue(date = todayStr()) {
+  return date.slice(0, 7);
+}
+
+function monthRangeFromValue(month: string) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const lastDay = new Date(year, monthIndex, 0).getDate();
+  return {
+    start: `${month}-01`,
+    end: `${month}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+function rangeFor(
+  preset: RangePreset,
+  month: string,
+): { start?: string; end?: string } {
+  if (preset === "month") return monthRangeFromValue(month);
   if (preset === "year") return yearRange();
   return {};
 }
 
 export default function AnalyticsTab() {
   const [preset, setPreset] = useState<RangePreset>("month");
+  const [month, setMonth] = useState(() => monthValue());
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [weekdayMode, setWeekdayMode] = useState<"avg" | "total">("avg");
 
   useEffect(() => {
-    fetchAnalytics(rangeFor(preset))
+    fetchAnalytics(rangeFor(preset, month))
       .then(setData)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [preset]);
+  }, [preset, month]);
 
   return (
     <div className="pb-24">
-      <div className="sticky top-14 z-10 bg-stone-100/95 backdrop-blur border-b border-stone-200 px-4 py-3 flex gap-2">
-        {PRESETS.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => setPreset(p.key)}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
-              preset === p.key
-                ? "bg-rose-800 text-white"
-                : "bg-white text-stone-600 border border-stone-300"
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
+      <div className="sticky top-14 z-10 space-y-2 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
+        <div className="flex gap-2 overflow-x-auto">
+          {PRESETS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => {
+                setLoading(true);
+                setError("");
+                setPreset(p.key);
+              }}
+              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                preset === p.key
+                  ? "bg-rose-800 text-white"
+                  : "bg-white text-stone-600 border border-stone-300"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {preset === "month" && (
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => {
+              setLoading(true);
+              setError("");
+              setMonth(e.target.value || monthValue());
+            }}
+            className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base"
+          />
+        )}
       </div>
 
       {loading && (

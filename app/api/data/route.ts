@@ -34,23 +34,32 @@ export async function GET(request: Request) {
         select: {
           name: true,
           priceAud: true,
-          category: { select: { name: true } },
+          sortOrder: true,
+          category: { select: { name: true, sortOrder: true } },
         },
       },
     },
-    orderBy: [{ date: "desc" }, { slot: "desc" }],
+    orderBy: [{ date: "asc" }, { slot: "asc" }],
   });
 
   if (view === "raw") {
-    const raw: RawRow[] = rows.map((r) => ({
-      date: r.date,
-      slot: r.slot,
-      categoryName: r.menuItem.category.name,
-      menuName: r.menuItem.name,
-      quantity: r.quantity,
-      priceAud: r.menuItem.priceAud,
-      amount: round2(r.quantity * r.menuItem.priceAud),
-    }));
+    const raw: RawRow[] = rows
+      .toSorted(
+        (a, b) =>
+          a.date.localeCompare(b.date) ||
+          a.slot - b.slot ||
+          a.menuItem.category.sortOrder - b.menuItem.category.sortOrder ||
+          a.menuItem.sortOrder - b.menuItem.sortOrder,
+      )
+      .map((r) => ({
+        date: r.date,
+        slot: r.slot,
+        categoryName: r.menuItem.category.name,
+        menuName: r.menuItem.name,
+        quantity: r.quantity,
+        priceAud: r.menuItem.priceAud,
+        amount: round2(r.quantity * r.menuItem.priceAud),
+      }));
     return Response.json({ view: "raw", rows: raw });
   }
 
