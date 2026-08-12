@@ -1,14 +1,14 @@
 // アプリ全体で共有する設定・ユーティリティ
 
 /// 2時間ごとのタイムスロット（開始時刻 hour）。
-/// 営業時間 10:00〜22:00 を想定。必要に応じて変更可能。
-export const TIME_SLOTS = [10, 12, 14, 16, 18, 20] as const;
+/// 廃棄入力は 12:00〜22:00 を想定。必要に応じて変更可能。
+export const TIME_SLOTS = [12, 14, 16, 18, 20] as const;
 
 export type TimeSlot = (typeof TIME_SLOTS)[number];
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/// スロットのラベル（例: "10:00-12:00"）
+/// スロットのラベル（例: "12:00-14:00"）
 export function slotLabel(slot: number): string {
   return `${pad(slot)}:00–${pad(slot + 2)}:00`;
 }

@@ -73,7 +73,7 @@ npm run db:setup
 | `MenuItem` | 店舗ごとの個々のメニュー（マグロ、サーモン など）。 |
 | `WasteEntry` | 2時間ごとの廃棄数の生データ。`store` × `date`(YYYY-MM-DD) × `slot`(時間帯の開始時刻) × `menuItem` で一意。 |
 
-時間帯（2時間スロット）と営業時間は `lib/config.ts` の `TIME_SLOTS` で変更できます（初期値: 10,12,14,16,18,20 = 10:00〜22:00）。
+時間帯（2時間スロット）と営業時間は `lib/config.ts` の `TIME_SLOTS` で変更できます（初期値: 12,14,16,18,20 = 12:00〜22:00）。
 
 ## API
 

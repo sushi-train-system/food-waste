@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   TIME_SLOTS,
   currentSlot,
@@ -26,6 +26,7 @@ function buildQuantities(
 export default function InputTab() {
   const [menu, setMenu] = useState<CategoryDTO[]>([]);
   const [activeCat, setActiveCat] = useState<string>("");
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const [date, setDate] = useState<string>(() => todayStr());
   const [slot, setSlot] = useState<number>(() => currentSlot());
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -72,6 +73,10 @@ export default function InputTab() {
     () => menu.find((c) => c.slug === activeCat),
     [menu, activeCat],
   );
+  const activeCategoryIndex = useMemo(
+    () => menu.findIndex((c) => c.slug === activeCat),
+    [menu, activeCat],
+  );
 
   const categoryTotal = (cat: CategoryDTO) =>
     cat.items.reduce((sum, it) => sum + (quantities[it.id] ?? 0), 0);
@@ -95,6 +100,30 @@ export default function InputTab() {
   const setQty = (id: string, value: number) => {
     setQuantities((prev) => ({ ...prev, [id]: Math.max(0, value) }));
     setMessage("");
+  };
+
+  const moveCategory = (direction: -1 | 1) => {
+    if (menu.length === 0 || activeCategoryIndex < 0) return;
+    const nextIndex = activeCategoryIndex + direction;
+    if (nextIndex < 0 || nextIndex >= menu.length) return;
+    setActiveCat(menu[nextIndex].slug);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    const touch = e.touches[0];
+    swipeStart.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start) return;
+
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    moveCategory(dx < 0 ? 1 : -1);
   };
 
   const handleSave = async () => {
@@ -195,7 +224,11 @@ export default function InputTab() {
         })}
       </div>
 
-      <div className="px-4 space-y-2">
+      <div
+        className="px-4 space-y-2"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {activeCategory?.items.map((it) => {
           const q = quantities[it.id] ?? 0;
           const changed = isChanged(it.id);
