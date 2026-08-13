@@ -7,6 +7,7 @@ export const TIME_SLOTS = [12, 14, 16, 18, 20] as const;
 export type TimeSlot = (typeof TIME_SLOTS)[number];
 
 const pad = (n: number) => String(n).padStart(2, "0");
+const APP_TIME_ZONE = "Australia/Brisbane";
 
 /// スロットのラベル（例: "12:00-14:00"）
 export function slotLabel(slot: number): string {
@@ -14,7 +15,7 @@ export function slotLabel(slot: number): string {
 }
 
 /// 曜日名（日本語）。0=日曜 ... 6=土曜
-export const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"] as const;
+export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 /// YYYY-MM-DD の日付文字列から曜日インデックス(0-6)を返す
 export function weekdayIndexFromDate(dateStr: string): number {
@@ -25,12 +26,27 @@ export function weekdayIndexFromDate(dateStr: string): number {
 
 /// 今日の日付を YYYY-MM-DD（ローカル）で返す
 export function todayStr(now: Date = new Date()): string {
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: string) =>
+    parts.find((value) => value.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 /// 現在時刻に最も近い（含まれる）タイムスロットを返す
 export function currentSlot(now: Date = new Date()): TimeSlot {
-  const h = now.getHours();
+  const h = Number(
+    new Intl.DateTimeFormat("en-AU", {
+      timeZone: APP_TIME_ZONE,
+      hour: "2-digit",
+      hourCycle: "h23",
+      hour12: false,
+    }).format(now),
+  );
   let best: TimeSlot = TIME_SLOTS[0];
   for (const s of TIME_SLOTS) {
     if (h >= s) best = s;
@@ -83,4 +99,28 @@ export const DEFAULT_STORE_TIMEZONE =
 /// AUD 金額の表示（例: $12.50）
 export function formatAud(amount: number): string {
   return `$${amount.toFixed(2)}`;
+}
+
+export function formatMonthLabel(month: string): string {
+  const [year, monthIndex] = month.split("-");
+  const monthNames = [
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
+  ];
+  return `${monthNames[Number(monthIndex) - 1] ?? monthIndex} ${year}`;
+}
+
+export function formatDateLabel(date: string): string {
+  const [year, monthIndex, day] = date.split("-");
+  return `${day}/${monthIndex}/${year}`;
 }

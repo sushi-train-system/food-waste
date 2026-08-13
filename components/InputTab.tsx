@@ -142,7 +142,7 @@ export default function InputTab() {
       );
       await saveEntries({ date, slot, entries });
       setSavedQuantities(quantities);
-      setMessage("保存しました");
+      setMessage("Saved");
       setTimeout(() => setMessage(""), 2500);
     } catch (e) {
       setError(String(e));
@@ -152,7 +152,7 @@ export default function InputTab() {
   };
 
   if (loading) {
-    return <div className="p-6 text-center text-stone-500">読み込み中…</div>;
+    return <div className="p-6 text-center text-stone-500">Loading...</div>;
   }
 
   const weekday = WEEKDAY_LABELS[weekdayIndexFromDate(date)];
@@ -168,7 +168,7 @@ export default function InputTab() {
             className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-base"
           />
           <span className="text-sm font-medium text-rose-800 w-10 text-center">
-            {weekday}曜
+            {weekday}
           </span>
         </div>
         <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
@@ -187,41 +187,40 @@ export default function InputTab() {
           ))}
         </div>
         <div className="flex items-center justify-between rounded-lg bg-white border border-stone-200 px-3 py-2">
-          <span className="text-xs text-stone-500">この時間帯の廃棄</span>
+          <span className="text-xs text-stone-500">Waste in this slot</span>
           <span className="text-sm font-bold text-rose-800 tabular-nums">
-            {grandTotal} 個
+            {grandTotal} pcs
           </span>
         </div>
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto px-4 py-3 -mx-0">
-        {menu.map((c) => {
-          const t = categoryTotal(c);
-          return (
-            <button
-              key={c.slug}
-              onClick={() => setActiveCat(c.slug)}
-              className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                activeCat === c.slug
-                  ? "bg-stone-900 text-white"
-                  : "bg-white text-stone-700 border border-stone-200"
-              }`}
-            >
-              {c.name}
-              <span
-                className={`ml-1.5 rounded-full px-1.5 py-0.5 text-xs tabular-nums ${
+        <div className="flex gap-2 overflow-x-auto -mx-1 px-1">
+          {menu.map((c) => {
+            const t = categoryTotal(c);
+            return (
+              <button
+                key={c.slug}
+                onClick={() => setActiveCat(c.slug)}
+                className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${
                   activeCat === c.slug
-                    ? "bg-white/25"
-                    : t > 0
-                      ? "bg-rose-100 text-rose-800"
-                      : "bg-stone-100 text-stone-400"
+                    ? "bg-stone-900 text-white"
+                    : "bg-white text-stone-700 border border-stone-200"
                 }`}
               >
-                {t}
-              </span>
-            </button>
-          );
-        })}
+                {c.name}
+                <span
+                  className={`ml-1.5 rounded-full px-1.5 py-0.5 text-xs tabular-nums ${
+                    activeCat === c.slug
+                      ? "bg-white/25"
+                      : t > 0
+                        ? "bg-rose-100 text-rose-800"
+                        : "bg-stone-100 text-stone-400"
+                  }`}
+                >
+                  {t}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div
@@ -247,7 +246,7 @@ export default function InputTab() {
                   onClick={() => setQty(it.id, q - 1)}
                   disabled={q <= 0}
                   className="h-10 w-10 rounded-full bg-stone-100 text-2xl leading-none text-stone-700 disabled:opacity-30 active:bg-stone-200"
-                  aria-label="減らす"
+                  aria-label="Decrease"
                 >
                   −
                 </button>
@@ -264,7 +263,7 @@ export default function InputTab() {
                 <button
                   onClick={() => setQty(it.id, q + 1)}
                   className="h-10 w-10 rounded-full bg-rose-800 text-2xl leading-none text-white active:bg-rose-900"
-                  aria-label="増やす"
+                  aria-label="Increase"
                 >
                   +
                 </button>
@@ -289,12 +288,12 @@ export default function InputTab() {
           }`}
         >
           {saving
-            ? "保存中…"
+            ? "Saving..."
             : message
               ? message
               : changedCount > 0
-                ? `保存（${changedCount}件変更 / 合計 ${grandTotal} 個）`
-                : `変更なし（合計 ${grandTotal} 個）`}
+                ? `Save (${changedCount} changes / ${grandTotal} pcs total)`
+                : `No changes (${grandTotal} pcs total)`}
         </button>
       </div>
     </div>

@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchData } from "@/lib/api";
-import { formatAud, slotLabel, todayStr } from "@/lib/config";
+import MonthPicker from "./MonthPicker";
+import {
+  formatAud,
+  formatDateLabel,
+  formatMonthLabel,
+  slotLabel,
+  todayStr,
+} from "@/lib/config";
 import type { RawRow } from "@/lib/types";
 
 function csvCell(value: string | number) {
@@ -94,16 +101,16 @@ export default function DataTab() {
     <div className="pb-24">
       <div className="sticky top-14 z-10 space-y-3 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-between gap-2">
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => {
-              setLoading(true);
-              setError("");
-              setMonth(e.target.value || monthValue());
-            }}
-            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-base"
-          />
+          <div className="min-w-0 flex-1">
+            <MonthPicker
+              value={month}
+              onChange={(value) => {
+                setLoading(true);
+                setError("");
+                setMonth(value || monthValue());
+              }}
+            />
+          </div>
           <button
             onClick={downloadCsv}
             disabled={rows.length === 0}
@@ -114,16 +121,17 @@ export default function DataTab() {
         </div>
         <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2">
           <span className="text-xs text-stone-500">
-            {range.start} - {range.end}
+            {formatMonthLabel(month)} ({formatDateLabel(range.start)} -{" "}
+            {formatDateLabel(range.end)})
           </span>
           <span className="text-sm font-bold tabular-nums text-rose-800">
-            {totalQuantity} 個 / {formatAud(totalAmount)}
+            {totalQuantity} pcs / {formatAud(totalAmount)}
           </span>
         </div>
       </div>
 
       {loading && (
-        <div className="p-6 text-center text-stone-500">読込中…</div>
+        <div className="p-6 text-center text-stone-500">Loading...</div>
       )}
       {error && <p className="px-4 pt-4 text-sm text-red-600">{error}</p>}
 
@@ -136,13 +144,13 @@ export default function DataTab() {
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-xs text-stone-500">
                   <tr>
-                    <Th>日付</Th>
-                    <Th>時間帯</Th>
-                    <Th>ジャンル</Th>
-                    <Th>メニュー</Th>
-                    <Th right>個数</Th>
-                    <Th right>単価</Th>
-                    <Th right>金額</Th>
+                    <Th>Date</Th>
+                    <Th>Time Slot</Th>
+                    <Th>Category</Th>
+                    <Th>Menu</Th>
+                    <Th right>Qty</Th>
+                    <Th right>Unit Price</Th>
+                    <Th right>Amount</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -221,7 +229,7 @@ function Td({
 function Empty() {
   return (
     <p className="rounded-xl border border-stone-200 bg-white p-6 text-center text-stone-500">
-      この月のデータはまだありません。
+      No data for this month yet.
     </p>
   );
 }

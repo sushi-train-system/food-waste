@@ -4,8 +4,10 @@ import { getDefaultStore } from "@/lib/store";
 import type {
   AnalyticsResponse,
   CategoryBreakdown,
+  AnalyticsItemBreakdown,
   MonthlyPoint,
   SameMonthComparison,
+  WeekdayItemBreakdown,
   WeekdayPoint,
   YearlyPoint,
 } from "@/lib/types";
@@ -132,6 +134,8 @@ export async function GET(request: Request) {
       quantity: true,
       menuItem: {
         select: {
+          id: true,
+          name: true,
           priceAud: true,
           category: { select: { name: true } },
         },
@@ -145,6 +149,14 @@ export async function GET(request: Request) {
   const weekdayTotals = new Array(7).fill(0) as number[];
   const weekdayAmounts = new Array(7).fill(0) as number[];
   const categoryMap = new Map<string, { qty: number; amt: number }>();
+  const weekdayItemMaps = Array.from(
+    { length: 7 },
+    () =>
+      new Map<
+        string,
+        { menuName: string; categoryName: string; qty: number; amt: number }
+      >(),
+  );
 
   let totalCount = 0;
   let totalAmount = 0;
@@ -179,6 +191,16 @@ export async function GET(request: Request) {
     c.qty += q;
     c.amt += amt;
     categoryMap.set(catName, c);
+
+    const item = weekdayItemMaps[wd].get(r.menuItem.id) ?? {
+      menuName: r.menuItem.name,
+      categoryName: catName,
+      qty: 0,
+      amt: 0,
+    };
+    item.qty += q;
+    item.amt += amt;
+    weekdayItemMaps[wd].set(r.menuItem.id, item);
 
     if (!rangeStart || r.date < rangeStart) rangeStart = r.date;
     if (!rangeEnd || r.date > rangeEnd) rangeEnd = r.date;
@@ -228,6 +250,22 @@ export async function GET(request: Request) {
       amount: round2(v.amt),
     }));
 
+  const itemsByWeekday: WeekdayItemBreakdown[] = order.map((wd) => ({
+    weekday: wd,
+    label: WEEKDAY_LABELS[wd],
+    items: [...weekdayItemMaps[wd].values()]
+      .filter((item) => item.qty > 0)
+      .sort((a, b) => b.amt - a.amt)
+      .map(
+        (item): AnalyticsItemBreakdown => ({
+          menuName: item.menuName,
+          categoryName: item.categoryName,
+          quantity: item.qty,
+          amount: round2(item.amt),
+        }),
+      ),
+  }));
+
   let sameMonthComparison: SameMonthComparison | null = null;
   if (selectedMonth) {
     const previousMonth = previousYearMonth(selectedMonth);
@@ -253,6 +291,7 @@ export async function GET(request: Request) {
     yearly,
     weekday,
     byCategory,
+    itemsByWeekday,
     sameMonthComparison,
     totalCount,
     totalAmount: round2(totalAmount),

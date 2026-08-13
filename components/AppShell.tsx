@@ -11,19 +11,19 @@ type Tab = "input" | "analytics" | "data" | "settings";
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   {
     key: "input",
-    label: "入力",
+    label: "Input",
     icon: (
       <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
     ),
   },
   {
     key: "analytics",
-    label: "分析",
+    label: "Analytics",
     icon: <path d="M3 3v18h18M7 15l4-4 3 3 5-6" />,
   },
   {
     key: "data",
-    label: "データ",
+    label: "Data",
     icon: (
       <>
         <ellipse cx="12" cy="5" rx="8" ry="3" />
@@ -33,7 +33,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   },
   {
     key: "settings",
-    label: "設定",
+    label: "Settings",
     icon: (
       <>
         <circle cx="12" cy="12" r="3" />
@@ -44,10 +44,10 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 const TITLES: Record<Tab, string> = {
-  input: "廃棄数の入力",
-  analytics: "分析",
-  data: "データ",
-  settings: "メニュー設定",
+  input: "Waste Entry",
+  analytics: "Analytics",
+  data: "Data",
+  settings: "Menu Settings",
 };
 
 export default function AppShell() {
@@ -57,7 +57,7 @@ export default function AppShell() {
     <div className="flex flex-col min-h-full">
       {/* ヘッダー */}
       <header className="fixed top-0 inset-x-0 z-30 h-14 bg-rose-900 text-white flex items-center px-4 shadow">
-        <span className="text-lg font-bold tracking-wide">寿司 廃棄トラッカー</span>
+        <span className="text-lg font-bold tracking-wide">Sushi Waste Tracker</span>
         <span className="ml-auto text-sm opacity-80">{TITLES[tab]}</span>
       </header>
 

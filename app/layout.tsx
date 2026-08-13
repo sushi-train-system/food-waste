@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "寿司廃棄トラッカー",
-  description: "寿司屋の廃棄数を2時間ごとに記録し、曜日・月次・年次で分析します。",
+  title: "Sushi Waste Tracker",
+  description: "Track sushi waste in two-hour slots and analyze it by weekday, month, and year.",
 };
 
 export const viewport: Viewport = {
@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-stone-100 text-stone-900">
         {children}
       </body>

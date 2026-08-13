@@ -104,6 +104,19 @@ export type CategoryBreakdown = {
   amount: number;
 };
 
+export type AnalyticsItemBreakdown = {
+  menuName: string;
+  categoryName: string;
+  quantity: number;
+  amount: number;
+};
+
+export type WeekdayItemBreakdown = {
+  weekday: number;
+  label: string;
+  items: AnalyticsItemBreakdown[];
+};
+
 export type SameMonthComparison = {
   current: MonthlyPoint;
   previous: MonthlyPoint;
@@ -118,6 +131,7 @@ export type AnalyticsResponse = {
   yearly: YearlyPoint[];
   weekday: WeekdayPoint[];
   byCategory: CategoryBreakdown[];
+  itemsByWeekday: WeekdayItemBreakdown[];
   sameMonthComparison: SameMonthComparison | null;
   totalCount: number;
   totalAmount: number;
