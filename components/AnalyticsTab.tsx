@@ -50,6 +50,8 @@ const CATEGORY_COLORS = [
   "#78716c",
 ];
 const RADIAN = Math.PI / 180;
+const PRODUCT_CHART_SLICE_LIMIT = 7;
+const PRODUCT_CHART_LABEL_MIN_PCT = 8;
 
 function monthValue(date = todayStr()) {
   return date.slice(0, 7);
@@ -508,6 +510,30 @@ function ProductPieChart({
       fill: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
     };
   });
+  const primaryChartItems = chartData.slice(0, PRODUCT_CHART_SLICE_LIMIT);
+  const otherChartItems = chartData.slice(PRODUCT_CHART_SLICE_LIMIT);
+  const otherValue = otherChartItems.reduce((sum, item) => sum + item.value, 0);
+  const otherAmount = otherChartItems.reduce((sum, item) => sum + item.amount, 0);
+  const otherQuantity = otherChartItems.reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  );
+  const groupedChartData =
+    otherValue > 0
+      ? [
+          ...primaryChartItems,
+          {
+            menuName: "Other",
+            categoryName: `${otherChartItems.length} items`,
+            name: "Other",
+            value: otherValue,
+            amount: otherAmount,
+            quantity: otherQuantity,
+            pct: total > 0 ? Math.round((otherValue / total) * 100) : 0,
+            fill: "#d6d3d1",
+          },
+        ]
+      : primaryChartItems;
   const visibleItems = expanded ? chartData : chartData.slice(0, 3);
   const hiddenCount = Math.max(0, chartData.length - visibleItems.length);
 
@@ -536,9 +562,9 @@ function ProductPieChart({
         total={total}
       />
       <ResponsiveContainer width="100%" height={240}>
-        <PieChart>
+        <PieChart margin={{ top: 8, right: 34, bottom: 8, left: 34 }}>
           <Pie
-            data={chartData}
+            data={groupedChartData}
             dataKey="value"
             nameKey="name"
             cx="50%"
@@ -550,16 +576,16 @@ function ProductPieChart({
             endAngle={-270}
             activeShape={false}
             label={renderCategoryLabel}
-            labelLine={{ stroke: "#a8a29e", strokeWidth: 1 }}
+            labelLine={false}
           >
-            {chartData.map((item) => (
+            {groupedChartData.map((item) => (
               <Cell key={item.menuName} fill={item.fill} />
             ))}
           </Pie>
           <Tooltip
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
-              const d = payload[0].payload as (typeof chartData)[number];
+              const d = payload[0].payload as (typeof groupedChartData)[number];
               return (
                 <div className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm shadow">
                   <p className="font-medium">{d.menuName}</p>
@@ -664,23 +690,37 @@ function renderCategoryLabel({
   ) {
     return null;
   }
-  if (pct <= 0) return null;
+  if (pct < PRODUCT_CHART_LABEL_MIN_PCT) return null;
   const radius = outerRadius + 22;
+  const lineStartRadius = outerRadius + 4;
+  const lineEndRadius = outerRadius + 18;
+  const lineStartX = cx + lineStartRadius * Math.cos(-midAngle * RADIAN);
+  const lineStartY = cy + lineStartRadius * Math.sin(-midAngle * RADIAN);
+  const lineEndX = cx + lineEndRadius * Math.cos(-midAngle * RADIAN);
+  const lineEndY = cy + lineEndRadius * Math.sin(-midAngle * RADIAN);
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
   const anchor = x > cx ? "start" : "end";
   const label = name.length > 12 ? `${name.slice(0, 11)}...` : name;
 
   return (
-    <text
-      x={x}
-      y={y}
-      textAnchor={anchor}
-      dominantBaseline="central"
-      className="fill-stone-600 text-[11px] font-medium"
-    >
-      {label} {pct}%
-    </text>
+    <g>
+      <path
+        d={`M${lineStartX},${lineStartY}L${lineEndX},${lineEndY}`}
+        stroke="#a8a29e"
+        strokeWidth={1}
+        fill="none"
+      />
+      <text
+        x={x}
+        y={y}
+        textAnchor={anchor}
+        dominantBaseline="central"
+        className="fill-stone-600 text-[11px] font-medium"
+      >
+        {label} {pct}%
+      </text>
+    </g>
   );
 }
 
