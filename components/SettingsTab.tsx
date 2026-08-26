@@ -4,8 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   createCategory,
   createItem,
-  deleteCategory,
-  deleteItem,
   fetchAdminCategories,
   updateCategory,
   updateItem,
@@ -123,7 +121,7 @@ export default function SettingsTab() {
       {section === "categories" && (
         <>
           {cats.map((cat) => (
-            <CategorySettingsCard key={cat.id} cat={cat} busy={busy} run={run} />
+            <CategorySettingsCard key={cat.id} cat={cat} run={run} />
           ))}
 
           <div className="rounded-xl border border-dashed border-stone-300 bg-white p-4">
@@ -274,11 +272,9 @@ function ProductCategoryCard({
 
 function CategorySettingsCard({
   cat,
-  busy,
   run,
 }: {
   cat: AdminCategory;
-  busy: boolean;
   run: (fn: () => Promise<unknown>) => Promise<void>;
 }) {
   const [editingName, setEditingName] = useState(false);
@@ -290,16 +286,6 @@ function CategorySettingsCard({
       await run(() => updateCategory(cat.id, { name: name.trim() }));
     } else {
       setName(cat.name);
-    }
-  };
-
-  const removeCategory = async () => {
-    if (
-      confirm(
-        `Delete category "${cat.name}"?\nAll menu items and saved waste entries under this category will also be deleted.`,
-      )
-    ) {
-      await run(() => deleteCategory(cat.id));
     }
   };
 
@@ -328,13 +314,6 @@ function CategorySettingsCard({
           </button>
         )}
         <span className="text-xs text-stone-400">{cat.items.length} items</span>
-        <button
-          onClick={removeCategory}
-          disabled={busy}
-          className="text-xs text-red-500 px-2 py-1"
-        >
-          Delete
-        </button>
       </div>
     </div>
   );
@@ -358,16 +337,6 @@ function ProductRow({
       await run(() => updateItem(item.id, { name: name.trim() }));
     } else {
       setName(item.name);
-    }
-  };
-
-  const remove = async () => {
-    if (
-      confirm(
-        `Delete "${item.name}"?\nSaved waste entries will also be deleted.\nChoose "Inactive" instead if you want to keep the history.`,
-      )
-    ) {
-      await run(() => deleteItem(item.id));
     }
   };
 
@@ -396,23 +365,22 @@ function ProductRow({
       <button
         onClick={() => run(() => updateItem(item.id, { active: !item.active }))}
         disabled={busy}
-        className={`text-xs rounded-full px-2.5 py-1 font-medium ${
+        className={`relative h-8 w-14 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
           item.active
-            ? "bg-emerald-100 text-emerald-700"
-            : "bg-stone-200 text-stone-500"
+            ? "bg-emerald-500"
+            : "bg-stone-300"
         }`}
+        role="switch"
+        aria-checked={item.active}
+        aria-label={`${item.name} ${item.active ? "Active" : "Inactive"}`}
       >
-        {item.active ? "Active" : "Inactive"}
+        <span
+          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+            item.active ? "translate-x-6" : "translate-x-1"
+          }`}
+        />
       </button>
 
-      <button
-        onClick={remove}
-        disabled={busy}
-        className="text-xs text-red-500 px-1.5 py-1"
-        aria-label="Delete"
-      >
-        Delete
-      </button>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import type {
   EntryDTO,
   RawRow,
   SaveEntriesBody,
+  SessionInfo,
 } from "./types";
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -107,4 +108,15 @@ export function fetchData(
   if (params.start) qs.set("start", params.start);
   if (params.end) qs.set("end", params.end);
   return jsonFetch(`/api/data?${qs.toString()}`);
+}
+
+export function fetchSessionInfo(): Promise<SessionInfo> {
+  return jsonFetch<SessionInfo>("/api/auth/me");
+}
+
+export function createStore(name: string): Promise<Pick<SessionInfo, "store" | "role">> {
+  return jsonFetch("/api/stores", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
 }

@@ -228,6 +228,30 @@ async function main() {
     },
   });
 
+  const ownerEmail = process.env.DEFAULT_OWNER_EMAIL?.trim().toLowerCase();
+  if (ownerEmail) {
+    const owner = await prisma.appUser.upsert({
+      where: { email: ownerEmail },
+      update: {},
+      create: { email: ownerEmail },
+    });
+
+    await prisma.storeUser.upsert({
+      where: {
+        userId_storeId: {
+          userId: owner.id,
+          storeId: store.id,
+        },
+      },
+      update: { role: "OWNER" },
+      create: {
+        userId: owner.id,
+        storeId: store.id,
+        role: "OWNER",
+      },
+    });
+  }
+
   const seedSlugs = CATEGORIES.map((cat) => cat.slug);
   const staleCategories = await prisma.category.findMany({
     where: { storeId: store.id, slug: { notIn: seedSlugs } },
@@ -312,8 +336,11 @@ async function main() {
   const itemCount = await prisma.menuItem.count({
     where: { storeId: store.id, active: true },
   });
+  const storeUserCount = await prisma.storeUser.count({
+    where: { storeId: store.id },
+  });
   console.log(
-    `Done. stores=${storeCount}, categories=${catCount}, menuItems=${itemCount}`,
+    `Done. stores=${storeCount}, storeUsers=${storeUserCount}, categories=${catCount}, menuItems=${itemCount}`,
   );
 }
 

@@ -11,12 +11,45 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum StoreRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+/// アプリにログインするユーザー。Supabase Auth 連携後は authUserId に紐づける。
+model AppUser {
+  id         String      @id @default(cuid())
+  email      String      @unique
+  name       String?
+  authUserId String?     @unique
+  stores     StoreUser[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+/// ユーザーがどの店舗に、どの権限で所属しているかを表す。
+model StoreUser {
+  id        String    @id @default(cuid())
+  userId    String
+  storeId   String
+  role      StoreRole @default(STAFF)
+  user      AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store     Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, storeId])
+  @@index([storeId])
+}
+
 /// 店舗。試験運用では DEFAULT_STORE_SLUG の1店舗を利用し、将来は店舗を追加する。
 model Store {
   id         String       @id @default(cuid())
   slug       String       @unique
   name       String
   timezone   String       @default("Australia/Brisbane")
+  users      StoreUser[]
   categories Category[]
   items      MenuItem[]
   entries    WasteEntry[]

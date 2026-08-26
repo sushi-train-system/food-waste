@@ -1,25 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import { weekdayIndexFromDate } from "@/lib/config";
-import { getDefaultStore } from "@/lib/store";
-import type {
-  DailyRow,
-  RawRow,
-} from "@/lib/types";
+import { authErrorResponse, getRequestStore } from "@/lib/auth";
+import type { DailyRow, RawRow } from "@/lib/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // GET /api/data?view=raw|daily&start=YYYY-MM-DD&end=YYYY-MM-DD
 export async function GET(request: Request) {
-  const store = await getDefaultStore();
-  const { searchParams } = new URL(request.url);
-  const view = searchParams.get("view") === "daily" ? "daily" : "raw";
-  const start = searchParams.get("start");
-  const end = searchParams.get("end");
+  try {
+    const store = await getRequestStore();
+    const { searchParams } = new URL(request.url);
+    const view = searchParams.get("view") === "daily" ? "daily" : "raw";
+    const start = searchParams.get("start");
+    const end = searchParams.get("end");
 
-  const dateFilter: { gte?: string; lte?: string } = {};
-  if (start && DATE_RE.test(start)) dateFilter.gte = start;
-  if (end && DATE_RE.test(end)) dateFilter.lte = end;
+    const dateFilter: { gte?: string; lte?: string } = {};
+    if (start && DATE_RE.test(start)) dateFilter.gte = start;
+    if (end && DATE_RE.test(end)) dateFilter.lte = end;
 
   const rows = await prisma.wasteEntry.findMany({
     where: {
@@ -114,5 +112,8 @@ export async function GET(request: Request) {
     })
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  return Response.json({ view: "daily", rows: daily });
+    return Response.json({ view: "daily", rows: daily });
+  } catch (error) {
+    return authErrorResponse(error);
+  }
 }

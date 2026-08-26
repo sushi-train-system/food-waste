@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { todayStr, WEEKDAY_LABELS, weekdayIndexFromDate } from "@/lib/config";
-import { getDefaultStore } from "@/lib/store";
+import { authErrorResponse, getRequestStore } from "@/lib/auth";
 import type {
   AnalyticsResponse,
   CategoryBreakdown,
@@ -110,39 +110,40 @@ async function aggregateMonth(
 
 // GET /api/analytics?start=YYYY-MM-DD&end=YYYY-MM-DD&category=slug
 export async function GET(request: Request) {
-  const store = await getDefaultStore();
-  const { searchParams } = new URL(request.url);
-  const start = searchParams.get("start");
-  const end = searchParams.get("end");
-  const categorySlug = searchParams.get("category");
-  const selectedMonth = sameMonth(start, end);
+  try {
+    const store = await getRequestStore();
+    const { searchParams } = new URL(request.url);
+    const start = searchParams.get("start");
+    const end = searchParams.get("end");
+    const categorySlug = searchParams.get("category");
+    const selectedMonth = sameMonth(start, end);
 
-  const dateFilter: { gte?: string; lte?: string } = {};
-  if (start && DATE_RE.test(start)) dateFilter.gte = start;
-  if (end && DATE_RE.test(end)) dateFilter.lte = end;
+    const dateFilter: { gte?: string; lte?: string } = {};
+    if (start && DATE_RE.test(start)) dateFilter.gte = start;
+    if (end && DATE_RE.test(end)) dateFilter.lte = end;
 
-  const rows = await prisma.wasteEntry.findMany({
-    where: {
-      storeId: store.id,
-      ...(Object.keys(dateFilter).length ? { date: dateFilter } : {}),
-      ...(categorySlug
-        ? { menuItem: { category: { slug: categorySlug } } }
-        : {}),
-    },
-    select: {
-      date: true,
-      quantity: true,
-      menuItem: {
-        select: {
-          id: true,
-          name: true,
-          priceAud: true,
-          category: { select: { name: true } },
+    const rows = await prisma.wasteEntry.findMany({
+      where: {
+        storeId: store.id,
+        ...(Object.keys(dateFilter).length ? { date: dateFilter } : {}),
+        ...(categorySlug
+          ? { menuItem: { category: { slug: categorySlug } } }
+          : {}),
+      },
+      select: {
+        date: true,
+        quantity: true,
+        menuItem: {
+          select: {
+            id: true,
+            name: true,
+            priceAud: true,
+            category: { select: { name: true } },
+          },
         },
       },
-    },
-    orderBy: { date: "asc" },
-  });
+      orderBy: { date: "asc" },
+    });
 
   const monthlyMap = new Map<string, { qty: number; amt: number }>();
   const yearlyMap = new Map<string, { qty: number; amt: number }>();
@@ -299,5 +300,8 @@ export async function GET(request: Request) {
     rangeEnd,
   };
 
-  return Response.json(response);
+    return Response.json(response);
+  } catch (error) {
+    return authErrorResponse(error);
+  }
 }

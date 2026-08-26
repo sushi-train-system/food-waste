@@ -32,6 +32,25 @@ export type AdminCategory = {
   items: AdminMenuItem[];
 };
 
+export type SessionStore = {
+  id: string;
+  slug: string;
+  name: string;
+  timezone: string;
+};
+
+export type SessionUser = {
+  id: string;
+  email: string;
+  name: string | null;
+};
+
+export type SessionInfo = {
+  user: SessionUser;
+  store: SessionStore | null;
+  role: "OWNER" | "MANAGER" | "STAFF" | null;
+};
+
 export type EntryDTO = {
   menuItemId: string;
   quantity: number;
