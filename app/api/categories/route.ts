@@ -1,13 +1,18 @@
 import { prisma } from "@/lib/prisma";
-import { authErrorResponse, getRequestStore } from "@/lib/auth";
+import {
+  authErrorResponse,
+  getCurrentStoreContext,
+  requireSettingsAccess,
+} from "@/lib/auth";
 import type { AdminCategory } from "@/lib/types";
 
 // 管理用: 全カテゴリ + 全メニュー（無効含む）
 export async function GET() {
   try {
-    const store = await getRequestStore();
+    const context = await getCurrentStoreContext();
+    await requireSettingsAccess(context);
     const categories = await prisma.category.findMany({
-      where: { storeId: store.id },
+      where: { storeId: context.store.id },
       orderBy: { sortOrder: "asc" },
       include: { items: { orderBy: { sortOrder: "asc" } } },
     });
@@ -39,7 +44,8 @@ function genSlug() {
 // カテゴリ作成 body: { name }
 export async function POST(request: Request) {
   try {
-    const store = await getRequestStore();
+    const context = await getCurrentStoreContext();
+    await requireSettingsAccess(context);
     let body: { name?: string };
     try {
       body = await request.json();
@@ -52,13 +58,13 @@ export async function POST(request: Request) {
     }
 
     const max = await prisma.category.aggregate({
-      where: { storeId: store.id },
+      where: { storeId: context.store.id },
       _max: { sortOrder: true },
     });
     const sortOrder = (max._max.sortOrder ?? -1) + 1;
 
     const category = await prisma.category.create({
-      data: { storeId: store.id, name, slug: genSlug(), sortOrder },
+      data: { storeId: context.store.id, name, slug: genSlug(), sortOrder },
     });
 
     return Response.json(category, { status: 201 });

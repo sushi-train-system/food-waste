@@ -7,6 +7,7 @@ import type {
   RawRow,
   SaveEntriesBody,
   SessionInfo,
+  StoreMember,
 } from "./types";
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -118,5 +119,49 @@ export function createStore(name: string): Promise<Pick<SessionInfo, "store" | "
   return jsonFetch("/api/stores", {
     method: "POST",
     body: JSON.stringify({ name }),
+  });
+}
+
+export function fetchMembers(): Promise<StoreMember[]> {
+  return jsonFetch<StoreMember[]>("/api/members");
+}
+
+export function unlockSettings(password: string): Promise<{ ok: boolean }> {
+  return jsonFetch("/api/settings/unlock", {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+}
+
+export function lockSettings(): Promise<{ ok: boolean }> {
+  return jsonFetch("/api/settings/unlock", {
+    method: "DELETE",
+  });
+}
+
+export function changeSettingsPassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ ok: boolean }> {
+  return jsonFetch("/api/settings/password", {
+    method: "PATCH",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export function inviteMember(email: string) {
+  return jsonFetch<StoreMember>("/api/members", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function updateMember(
+  id: string,
+  data: { active?: boolean },
+) {
+  return jsonFetch<StoreMember>(`/api/members/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
   });
 }

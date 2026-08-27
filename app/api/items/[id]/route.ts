@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { authErrorResponse, getRequestStore } from "@/lib/auth";
+import {
+  authErrorResponse,
+  getCurrentStoreContext,
+  requireSettingsAccess,
+} from "@/lib/auth";
 
 // メニュー更新 body: { name?, active?, sortOrder?, priceAud? }
 export async function PATCH(
@@ -7,7 +11,8 @@ export async function PATCH(
   ctx: RouteContext<"/api/items/[id]">,
 ) {
   try {
-    const store = await getRequestStore();
+    const context = await getCurrentStoreContext();
+    await requireSettingsAccess(context);
     const { id } = await ctx.params;
     let body: {
       name?: string;
@@ -41,7 +46,7 @@ export async function PATCH(
     }
 
     const existing = await prisma.menuItem.findFirst({
-      where: { id, storeId: store.id },
+      where: { id, storeId: context.store.id },
     });
     if (!existing) {
       return Response.json({ error: "menu item not found" }, { status: 404 });
@@ -60,10 +65,11 @@ export async function DELETE(
   ctx: RouteContext<"/api/items/[id]">,
 ) {
   try {
-    const store = await getRequestStore();
+    const context = await getCurrentStoreContext();
+    await requireSettingsAccess(context);
     const { id } = await ctx.params;
     const result = await prisma.menuItem.deleteMany({
-      where: { id, storeId: store.id },
+      where: { id, storeId: context.store.id },
     });
     if (result.count === 0) {
       return Response.json({ error: "menu item not found" }, { status: 404 });

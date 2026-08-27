@@ -1,5 +1,10 @@
 import type { StoreRole } from "@prisma/client";
+import { cookies } from "next/headers";
 import { prisma } from "./prisma";
+import {
+  isValidSettingsUnlockCookie,
+  SETTINGS_UNLOCK_COOKIE,
+} from "./settings-password";
 import { getDefaultStore } from "./store";
 import { hasSupabaseConfig } from "./supabase/config";
 import { createSupabaseServerClient } from "./supabase/server";
@@ -31,12 +36,21 @@ export class StoreAccessRequiredError extends Error {
   }
 }
 
+export class PermissionDeniedError extends Error {
+  constructor() {
+    super("Permission denied");
+  }
+}
+
 export function authErrorResponse(error: unknown) {
   if (error instanceof AuthRequiredError) {
     return Response.json({ error: "authentication required" }, { status: 401 });
   }
   if (error instanceof StoreAccessRequiredError) {
     return Response.json({ error: "store access required" }, { status: 403 });
+  }
+  if (error instanceof PermissionDeniedError) {
+    return Response.json({ error: "permission denied" }, { status: 403 });
   }
   throw error;
 }
@@ -74,7 +88,7 @@ export async function getCurrentAppUser() {
 export async function getCurrentStoreContext(): Promise<CurrentStoreContext> {
   const appUser = await getCurrentAppUser();
   const membership = await prisma.storeUser.findFirst({
-    where: { userId: appUser.id },
+    where: { userId: appUser.id, active: true },
     orderBy: { createdAt: "asc" },
     include: { store: true },
   });
@@ -101,6 +115,32 @@ export async function getCurrentStoreContext(): Promise<CurrentStoreContext> {
 
 export async function getRequestStore() {
   return (await getCurrentStoreContext()).store;
+}
+
+export function requireOwner(context: CurrentStoreContext) {
+  if (context.role !== "OWNER") {
+    throw new PermissionDeniedError();
+  }
+}
+
+export function requireManagerOrOwner(context: CurrentStoreContext) {
+  if (context.role !== "OWNER" && context.role !== "MANAGER") {
+    throw new PermissionDeniedError();
+  }
+}
+
+export async function requireSettingsAccess(context: CurrentStoreContext) {
+  const cookieStore = await cookies();
+  const cookieValue = cookieStore.get(SETTINGS_UNLOCK_COOKIE)?.value;
+  if (
+    !isValidSettingsUnlockCookie(
+      cookieValue,
+      context.store.id,
+      context.appUser.id,
+    )
+  ) {
+    throw new PermissionDeniedError();
+  }
 }
 
 export async function getRequestStoreOrDefault() {

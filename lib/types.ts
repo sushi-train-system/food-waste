@@ -51,6 +51,19 @@ export type SessionInfo = {
   role: "OWNER" | "MANAGER" | "STAFF" | null;
 };
 
+export type StoreMemberRole = "OWNER" | "MANAGER" | "STAFF";
+
+export type StoreMember = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: StoreMemberRole;
+  active: boolean;
+  isCurrentUser: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type EntryDTO = {
   menuItemId: string;
   quantity: number;

@@ -70,8 +70,11 @@ export default function AppShell() {
     try {
       const info = await fetchSessionInfo();
       setSessionInfo(info);
+      return true;
     } catch {
       setSessionInfo(null);
+      setAuthError("Signed in, but failed to load your store access. Please try again.");
+      return false;
     }
   };
 
@@ -140,6 +143,9 @@ export default function AppShell() {
     );
   }
 
+  const visibleTabs = TABS;
+  const activeTab = tab;
+
   return (
     <div className="flex flex-col min-h-full">
       {/* ヘッダー */}
@@ -150,7 +156,7 @@ export default function AppShell() {
             <p>{sessionInfo.store.name}</p>
             <p>{sessionInfo.user.email}</p>
           </div>
-          <span className="text-sm opacity-80">{TITLES[tab]}</span>
+          <span className="text-sm opacity-80">{TITLES[activeTab]}</span>
           <button
             type="button"
             onClick={handleSignOut}
@@ -163,20 +169,20 @@ export default function AppShell() {
 
       {/* コンテンツ */}
       <main className="flex-1 pt-14">
-        {tab === "input" && <InputTab />}
-        {tab === "analytics" && <AnalyticsTab />}
-        {tab === "data" && <DataTab />}
-        {tab === "settings" && <SettingsTab />}
+        {activeTab === "input" && <InputTab />}
+        {activeTab === "analytics" && <AnalyticsTab />}
+        {activeTab === "data" && <DataTab />}
+        {activeTab === "settings" && <SettingsTab />}
       </main>
 
       {/* ボトムナビ */}
       <nav className="fixed bottom-0 inset-x-0 z-30 h-16 bg-white border-t border-stone-200 flex">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex-1 flex flex-col items-center justify-center gap-0.5 ${
-              tab === t.key ? "text-rose-800" : "text-stone-400"
+              activeTab === t.key ? "text-rose-800" : "text-stone-400"
             }`}
           >
             <svg
@@ -223,7 +229,7 @@ function LoginScreen({
 }: {
   error: string;
   onError: (message: string) => void;
-  onSuccess: () => Promise<void>;
+  onSuccess: () => Promise<boolean>;
 }) {
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [email, setEmail] = useState("");
@@ -256,7 +262,12 @@ function LoginScreen({
         return;
       }
 
-      await onSuccess();
+      const loaded = await onSuccess();
+      if (!loaded) {
+        onError("Signed in, but failed to load your store access. Please try again.");
+      }
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -336,7 +347,7 @@ function StoreSetupScreen({
   onCreated,
 }: {
   email: string;
-  onCreated: () => Promise<void>;
+  onCreated: () => Promise<boolean>;
 }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);

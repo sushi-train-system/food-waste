@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { authErrorResponse, getRequestStore } from "@/lib/auth";
+import {
+  authErrorResponse,
+  getCurrentStoreContext,
+  requireSettingsAccess,
+} from "@/lib/auth";
 
 // カテゴリ更新 body: { name?, sortOrder? }
 export async function PATCH(
@@ -7,7 +11,8 @@ export async function PATCH(
   ctx: RouteContext<"/api/categories/[id]">,
 ) {
   try {
-    const store = await getRequestStore();
+    const context = await getCurrentStoreContext();
+    await requireSettingsAccess(context);
     const { id } = await ctx.params;
     let body: { name?: string; sortOrder?: number };
     try {
@@ -28,7 +33,7 @@ export async function PATCH(
     }
 
     const existing = await prisma.category.findFirst({
-      where: { id, storeId: store.id },
+      where: { id, storeId: context.store.id },
     });
     if (!existing) {
       return Response.json({ error: "category not found" }, { status: 404 });
@@ -47,10 +52,11 @@ export async function DELETE(
   ctx: RouteContext<"/api/categories/[id]">,
 ) {
   try {
-    const store = await getRequestStore();
+    const context = await getCurrentStoreContext();
+    await requireSettingsAccess(context);
     const { id } = await ctx.params;
     const result = await prisma.category.deleteMany({
-      where: { id, storeId: store.id },
+      where: { id, storeId: context.store.id },
     });
     if (result.count === 0) {
       return Response.json({ error: "category not found" }, { status: 404 });

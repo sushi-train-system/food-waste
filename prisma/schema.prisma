@@ -34,6 +34,7 @@ model StoreUser {
   userId    String
   storeId   String
   role      StoreRole @default(STAFF)
+  active    Boolean   @default(true)
   user      AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
   store     Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
   createdAt DateTime  @default(now())
@@ -45,15 +46,16 @@ model StoreUser {
 
 /// 店舗。試験運用では DEFAULT_STORE_SLUG の1店舗を利用し、将来は店舗を追加する。
 model Store {
-  id         String       @id @default(cuid())
-  slug       String       @unique
-  name       String
-  timezone   String       @default("Australia/Brisbane")
-  users      StoreUser[]
-  categories Category[]
-  items      MenuItem[]
-  entries    WasteEntry[]
-  createdAt  DateTime     @default(now())
+  id                   String       @id @default(cuid())
+  slug                 String       @unique
+  name                 String
+  timezone             String       @default("Australia/Brisbane")
+  settingsPasswordHash String?
+  users                StoreUser[]
+  categories           Category[]
+  items                MenuItem[]
+  entries              WasteEntry[]
+  createdAt            DateTime     @default(now())
 }
 
 /// メニューのジャンル（にぎり / ロール など）。入力タブのサブタブに対応。
