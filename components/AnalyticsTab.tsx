@@ -7,6 +7,7 @@ import {
   Cell,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -18,6 +19,7 @@ import MonthPicker from "./MonthPicker";
 import type {
   AnalyticsItemBreakdown,
   AnalyticsResponse,
+  TimeSlotPoint,
   WeekdayPoint,
 } from "@/lib/types";
 
@@ -85,6 +87,29 @@ function weekdayItems(data: AnalyticsResponse | null, weekday: number) {
   return data?.itemsByWeekday.find((w) => w.weekday === weekday)?.items ?? [];
 }
 
+function weekdayTimeSlots(data: AnalyticsResponse | null, weekday: number) {
+  return data?.timeSlotsByWeekday.find((w) => w.weekday === weekday)?.slots ?? [];
+}
+
+function monthlyItems(data: AnalyticsResponse | null) {
+  const itemMap = new Map<string, AnalyticsItemBreakdown>();
+  for (const weekday of data?.itemsByWeekday ?? []) {
+    for (const item of weekday.items) {
+      const key = `${item.categoryName}:${item.menuName}`;
+      const current = itemMap.get(key) ?? {
+        menuName: item.menuName,
+        categoryName: item.categoryName,
+        quantity: 0,
+        amount: 0,
+      };
+      current.quantity += item.quantity;
+      current.amount = Math.round((current.amount + item.amount) * 100) / 100;
+      itemMap.set(key, current);
+    }
+  }
+  return [...itemMap.values()];
+}
+
 export default function AnalyticsTab() {
   const [preset, setPreset] = useState<RangePreset>("month");
   const [month, setMonth] = useState(() => monthValue());
@@ -118,15 +143,28 @@ export default function AnalyticsTab() {
   }, [preset, month, compareMonth]);
 
   const selectedCurrentItems = useMemo(() => {
-    if (!productSelection) return [];
+    if (!productSelection) return monthlyItems(data);
     return weekdayItems(data, productSelection.weekday);
   }, [data, productSelection]);
   const selectedComparisonItems = useMemo(() => {
-    if (!productSelection) return [];
+    if (!productSelection) return monthlyItems(comparisonData);
     return weekdayItems(comparisonData, productSelection.weekday);
   }, [comparisonData, productSelection]);
   const currentPeriodLabel =
     preset === "month" ? formatMonthLabel(month) : "Selected Period";
+  const productMetric = productSelection?.metric ?? weekdayMetric;
+  const productBreakdownTitle = productSelection
+    ? `${productSelection.label} Product Breakdown`
+    : "Monthly Product Breakdown";
+  const selectedCurrentTimeSlots = productSelection
+    ? weekdayTimeSlots(data, productSelection.weekday)
+    : data?.timeSlots ?? [];
+  const selectedComparisonTimeSlots = productSelection
+    ? weekdayTimeSlots(comparisonData, productSelection.weekday)
+    : comparisonData?.timeSlots ?? [];
+  const timeSlotTitle = productSelection
+    ? `${productSelection.label} Waste by Time Slot`
+    : "Monthly Waste by Time Slot";
 
   const selectWeekdayProducts = (selection: {
     source: ComparisonSource;
@@ -134,7 +172,14 @@ export default function AnalyticsTab() {
     label: string;
     metric: ProductMetric;
   }) => {
-    setProductSelection(selection);
+    setProductSelection((current) =>
+      current &&
+      current.source === selection.source &&
+      current.weekday === selection.weekday &&
+      current.metric === selection.metric
+        ? null
+        : selection,
+    );
   };
 
   return (
@@ -239,42 +284,70 @@ export default function AnalyticsTab() {
                 />
               </Card>
 
-              {productSelection && (
-                <Card
-                  title={`${productSelection.label} Product Breakdown`}
-                  right={
-                    <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
-                      {productSelection.metric === "amount"
-                        ? "Waste Amount"
-                        : "Waste Qty"}
-                    </span>
-                  }
-                >
-                  <div className="grid grid-cols-2 gap-3">
+              <Card
+                title={productBreakdownTitle}
+                right={
+                  <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
+                    {productMetric === "amount" ? "Waste Amount" : "Waste Qty"}
+                  </span>
+                }
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <ProductPieChart
+                    key={`current-${productSelection?.weekday ?? "month"}-${productMetric}-${currentPeriodLabel}`}
+                    title={
+                      productSelection
+                        ? `${currentPeriodLabel} / ${productSelection.label}`
+                        : currentPeriodLabel
+                    }
+                    accentColor={CURRENT_FILL}
+                    items={selectedCurrentItems}
+                    metric={productMetric}
+                  />
+                  {comparisonData && (
                     <ProductPieChart
-                      key={`current-${productSelection.weekday}-${productSelection.metric}-${currentPeriodLabel}`}
-                      title={currentPeriodLabel}
-                      accentColor={CURRENT_FILL}
-                      items={selectedCurrentItems}
-                      metric={productSelection.metric}
+                      key={`comparison-${productSelection?.weekday ?? "month"}-${productMetric}-${compareMonth}`}
+                      title={
+                        productSelection
+                          ? `${formatMonthLabel(compareMonth)} / ${productSelection.label}`
+                          : formatMonthLabel(compareMonth)
+                      }
+                      accentColor={COMPARE_FILL}
+                      items={selectedComparisonItems}
+                      metric={productMetric}
                     />
-                    {comparisonData && (
-                      <ProductPieChart
-                        key={`comparison-${productSelection.weekday}-${productSelection.metric}-${compareMonth}`}
-                        title={formatMonthLabel(compareMonth)}
-                        accentColor={COMPARE_FILL}
-                        items={selectedComparisonItems}
-                        metric={productSelection.metric}
-                      />
-                    )}
-                  </div>
-                </Card>
-              )}
+                  )}
+                </div>
+              </Card>
+
+              <Card
+                title={timeSlotTitle}
+                right={
+                  <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600">
+                    {weekdayMetric === "amount" ? "Waste Amount" : "Waste Qty"}
+                  </span>
+                }
+              >
+                <TimeSlotComparisonChart
+                  current={selectedCurrentTimeSlots}
+                  comparison={comparisonData ? selectedComparisonTimeSlots : null}
+                  currentLabel={
+                    productSelection
+                      ? `${currentPeriodLabel} / ${productSelection.label}`
+                      : currentPeriodLabel
+                  }
+                  comparisonLabel={
+                    productSelection
+                      ? `${formatMonthLabel(compareMonth)} / ${productSelection.label}`
+                      : formatMonthLabel(compareMonth)
+                  }
+                  metric={weekdayMetric}
+                />
+              </Card>
 
               {preset === "month" && data.sameMonthComparison && (
                 <SameMonthComparisonCard data={data.sameMonthComparison} />
               )}
-
             </>
           )}
         </div>
@@ -347,8 +420,17 @@ function WeekdayComparisonChart({
     });
   };
 
+  const isSelected = (source: ComparisonSource, weekday: number) =>
+    selected?.metric === metric &&
+    selected.source === source &&
+    selected.weekday === weekday;
+
   return (
-    <div className="space-y-3">
+    <div
+      className={`space-y-3 rounded-lg p-2 transition-colors ${
+        selected?.metric === metric ? "bg-rose-50/60" : "bg-transparent"
+      }`}
+    >
       {hasComparison && (
         <div className="flex flex-wrap gap-3 text-xs text-stone-600">
           <span className="inline-flex items-center gap-1.5">
@@ -396,7 +478,14 @@ function WeekdayComparisonChart({
             radius={[4, 4, 0, 0]}
             opacity={activeDataKey && activeDataKey !== "current" ? 0.55 : 1}
             onClick={(entry: unknown) => handleBarClick("current", entry)}
-          />
+          >
+            {chartData.map((entry) => (
+              <Cell
+                key={`current-${entry.weekday}`}
+                fill={isSelected("current", entry.weekday) ? "#be123c" : CURRENT_FILL}
+              />
+            ))}
+          </Bar>
           {hasComparison && (
             <Bar
               dataKey="comparison"
@@ -408,6 +497,143 @@ function WeekdayComparisonChart({
               onClick={(entry: unknown) =>
                 handleBarClick("comparison", entry)
               }
+            >
+              {chartData.map((entry) => (
+                <Cell
+                  key={`comparison-${entry.weekday}`}
+                  fill={
+                    isSelected("comparison", entry.weekday)
+                      ? "#57534e"
+                      : COMPARE_FILL
+                  }
+                />
+              ))}
+            </Bar>
+          )}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function TimeSlotComparisonChart({
+  current,
+  comparison,
+  currentLabel,
+  comparisonLabel,
+  metric,
+}: {
+  current: TimeSlotPoint[];
+  comparison: TimeSlotPoint[] | null;
+  currentLabel: string;
+  comparisonLabel: string;
+  metric: ProductMetric;
+}) {
+  const comparisonBySlot = new Map((comparison ?? []).map((s) => [s.slot, s]));
+  const slotOrder = [
+    ...new Set([
+      ...current.map((s) => s.slot),
+      ...(comparison ?? []).map((s) => s.slot),
+    ]),
+  ].sort((a, b) => a - b);
+  const chartData = slotOrder.map((slot) => {
+    const currentSlot = current.find((s) => s.slot === slot);
+    const comparisonSlot = comparisonBySlot.get(slot);
+    return {
+      slot,
+      label: currentSlot?.label ?? comparisonSlot?.label ?? `${slot}:00`,
+      current: currentSlot
+        ? metric === "amount"
+          ? currentSlot.amount
+          : currentSlot.total
+        : 0,
+      comparison: comparisonSlot
+        ? metric === "amount"
+          ? comparisonSlot.amount
+          : comparisonSlot.total
+        : 0,
+    };
+  });
+  const totalCurrent = chartData.reduce((sum, row) => sum + row.current, 0);
+  const average =
+    chartData.length > 0
+      ? Math.round((totalCurrent / chartData.length) * 100) / 100
+      : 0;
+  const hasComparison = comparison !== null;
+  const height = Math.max(150, chartData.length * (hasComparison ? 34 : 28) + 46);
+
+  if (chartData.length === 0) {
+    return (
+      <p className="rounded-lg bg-stone-50 p-5 text-center text-sm text-stone-500">
+        No data
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {hasComparison && (
+        <div className="flex flex-wrap gap-3 text-xs text-stone-600">
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: CURRENT_FILL }}
+            />
+            {currentLabel}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: COMPARE_FILL }}
+            />
+            {comparisonLabel}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-stone-400">
+            Average
+          </span>
+        </div>
+      )}
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart
+          data={chartData}
+          layout="vertical"
+          margin={{ top: 8, right: 24, left: 0, bottom: 4 }}
+        >
+          <XAxis
+            type="number"
+            tick={{ fontSize: 11 }}
+            tickFormatter={(v) => (metric === "amount" ? `$${v}` : `${v}`)}
+          />
+          <YAxis
+            dataKey="label"
+            type="category"
+            width={48}
+            tick={{ fontSize: 12 }}
+          />
+          <Tooltip
+            formatter={(v, name) => [
+              metric === "amount" ? formatAud(Number(v)) : `${v} pcs`,
+              name === "current" ? currentLabel : comparisonLabel,
+            ]}
+            labelFormatter={(label) => `${label}`}
+          />
+          <ReferenceLine
+            x={average}
+            stroke="#a8a29e"
+            strokeDasharray="3 3"
+            label={{
+              value: "Avg",
+              position: "insideTopRight",
+              fill: "#78716c",
+              fontSize: 11,
+            }}
+          />
+          <Bar dataKey="current" fill={CURRENT_FILL} radius={[0, 4, 4, 0]} />
+          {hasComparison && (
+            <Bar
+              dataKey="comparison"
+              fill={COMPARE_FILL}
+              radius={[0, 4, 4, 0]}
             />
           )}
         </BarChart>
@@ -421,7 +647,7 @@ function SummaryCard({ data }: { data: AnalyticsResponse }) {
     (a, b) => b.avgAmount - a.avgAmount,
   )[0];
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid h-full grid-cols-2 gap-3">
       <div className="rounded-xl bg-rose-800 text-white p-4">
         <p className="text-xs opacity-80">Total Waste Amount</p>
         <p className="text-2xl font-bold tabular-nums">
@@ -455,7 +681,7 @@ function SameMonthComparisonCard({
   const totalFlat = data.diffTotal === 0;
   return (
     <Card title="Same Month Last Year">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-2 lg:grid-cols-2">
         <ComparisonMetric
           label="Waste Amount"
           current={formatAud(data.current.amount)}
@@ -742,23 +968,36 @@ function ComparisonMetric({
   flat: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
-      <p className="text-xs text-stone-500">{label}</p>
-      <p className="mt-1 text-xl font-bold tabular-nums text-stone-900">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+      <p className="min-w-[110px] text-sm font-semibold text-stone-700">
+        {label}
+      </p>
+      <p className="text-base font-bold tabular-nums text-stone-900">
         {current}
       </p>
-      <p className="mt-1 text-xs tabular-nums text-stone-500">{previous}</p>
-      <p
-        className={`mt-2 text-sm font-bold tabular-nums ${
-          flat ? "text-stone-500" : up ? "text-rose-700" : "text-emerald-700"
-        }`}
-      >
-        {diff}
-        {pct !== null && (
-          <span className="ml-1 text-xs font-medium">({pct > 0 ? "+" : ""}{pct}%)</span>
-        )}
-        {pct === null && <span className="ml-1 text-xs font-medium">No previous year</span>}
+      <p className="min-w-[160px] text-xs tabular-nums text-stone-500">
+        {previous}
       </p>
+      <div className="flex items-center gap-2">
+        <span
+          className={`text-sm font-bold tabular-nums ${
+            flat ? "text-stone-500" : up ? "text-rose-700" : "text-emerald-700"
+          }`}
+        >
+          {diff}
+        </span>
+        <span
+          className={`rounded-full px-2 py-1 text-xs font-semibold tabular-nums ${
+            flat
+              ? "bg-stone-200 text-stone-600"
+              : up
+                ? "bg-red-100 text-red-700"
+                : "bg-emerald-100 text-emerald-700"
+          }`}
+        >
+          {pct !== null ? `${pct > 0 ? "+" : ""}${pct}%` : "No previous"}
+        </span>
+      </div>
     </div>
   );
 }
@@ -767,13 +1006,15 @@ function Card({
   title,
   right,
   children,
+  className = "",
 }: {
   title: string;
   right?: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="rounded-xl bg-white border border-stone-200 p-4">
+    <div className={`rounded-xl bg-white border border-stone-200 p-4 ${className}`}>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-bold text-stone-800">{title}</h3>
         {right}

@@ -2,15 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  TIME_SLOTS,
   currentSlot,
   slotLabel,
   todayStr,
   WEEKDAY_LABELS,
   weekdayIndexFromDate,
 } from "@/lib/config";
-import { fetchEntries, fetchMenu, saveEntries } from "@/lib/api";
-import type { CategoryDTO } from "@/lib/types";
+import { fetchEntries, fetchMenu, fetchTimeSlots, saveEntries } from "@/lib/api";
+import type { CategoryDTO, TimeSlotDTO } from "@/lib/types";
 
 /** メニュー全件を 0 で初期化し、サーバー保存値で上書きする */
 function buildQuantities(
@@ -25,6 +24,7 @@ function buildQuantities(
 
 export default function InputTab() {
   const [menu, setMenu] = useState<CategoryDTO[]>([]);
+  const [timeSlots, setTimeSlots] = useState<TimeSlotDTO[]>([]);
   const [activeCat, setActiveCat] = useState<string>("");
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const [date, setDate] = useState<string>(() => todayStr());
@@ -40,10 +40,17 @@ export default function InputTab() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchMenu()
-      .then((cats) => {
+    Promise.all([fetchMenu(), fetchTimeSlots()])
+      .then(([cats, slots]) => {
         setMenu(cats);
+        setTimeSlots(slots);
         if (cats.length > 0) setActiveCat(cats[0].slug);
+        if (slots.length > 0) {
+          const startHours = slots.map((timeSlot) => timeSlot.startHour);
+          setSlot((current) =>
+            startHours.includes(current) ? current : currentSlot(new Date(), startHours),
+          );
+        }
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -172,9 +179,11 @@ export default function InputTab() {
           </span>
         </div>
         <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
-          {TIME_SLOTS.map((s) => (
+          {timeSlots.map((timeSlot) => {
+            const s = timeSlot.startHour;
+            return (
             <button
-              key={s}
+              key={timeSlot.id}
               onClick={() => setSlot(s)}
               className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
                 slot === s
@@ -184,7 +193,8 @@ export default function InputTab() {
             >
               {slotLabel(s)}
             </button>
-          ))}
+            );
+          })}
         </div>
         <div className="flex items-center justify-between rounded-lg bg-white border border-stone-200 px-3 py-2">
           <span className="text-xs text-stone-500">Waste in this slot</span>

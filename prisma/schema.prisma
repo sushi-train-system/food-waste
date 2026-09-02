@@ -52,10 +52,25 @@ model Store {
   timezone             String       @default("Australia/Brisbane")
   settingsPasswordHash String?
   users                StoreUser[]
+  timeSlots            TimeSlot[]
   categories           Category[]
   items                MenuItem[]
   entries              WasteEntry[]
   createdAt            DateTime     @default(now())
+}
+
+/// 店舗ごとの入力タイムスロット。WasteEntry.slot は startHour を保持する。
+model TimeSlot {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  startHour Int
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, startHour])
+  @@index([storeId])
 }
 
 /// メニューのジャンル（にぎり / ロール など）。入力タブのサブタブに対応。

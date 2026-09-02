@@ -4,6 +4,7 @@ import {
   DEFAULT_STORE_NAME,
   DEFAULT_STORE_SLUG,
   DEFAULT_STORE_TIMEZONE,
+  TIME_SLOTS,
 } from "../lib/config";
 
 const prisma = new PrismaClient();
@@ -251,6 +252,15 @@ async function main() {
       },
     });
   }
+
+  await prisma.timeSlot.createMany({
+    data: TIME_SLOTS.map((startHour, index) => ({
+      storeId: store.id,
+      startHour,
+      sortOrder: index,
+    })),
+    skipDuplicates: true,
+  });
 
   const seedSlugs = CATEGORIES.map((cat) => cat.slug);
   const staleCategories = await prisma.category.findMany({

@@ -3,6 +3,7 @@ import {
   DEFAULT_STORE_NAME,
   DEFAULT_STORE_SLUG,
   DEFAULT_STORE_TIMEZONE,
+  TIME_SLOTS,
 } from "./config";
 
 export async function getDefaultStore() {
@@ -17,6 +18,12 @@ export async function getDefaultStore() {
         slug: DEFAULT_STORE_SLUG,
         name: DEFAULT_STORE_NAME,
         timezone: DEFAULT_STORE_TIMEZONE,
+        timeSlots: {
+          create: TIME_SLOTS.map((startHour, index) => ({
+            startHour,
+            sortOrder: index,
+          })),
+        },
       },
     });
   } catch {

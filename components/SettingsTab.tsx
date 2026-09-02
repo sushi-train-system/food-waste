@@ -4,30 +4,37 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createCategory,
   createItem,
+  createTimeSlot,
   changeSettingsPassword,
+  deleteTimeSlot,
   fetchMembers,
   fetchAdminCategories,
+  fetchTimeSlots,
   inviteMember,
   lockSettings,
   unlockSettings,
   updateCategory,
   updateItem,
   updateMember,
+  updateTimeSlot,
 } from "@/lib/api";
-import type { AdminCategory, StoreMember } from "@/lib/types";
+import { slotLabel } from "@/lib/config";
+import type { AdminCategory, StoreMember, TimeSlotDTO } from "@/lib/types";
 
-type SettingsSection = "prices" | "products" | "categories" | "users";
+type SettingsSection = "prices" | "products" | "categories" | "slots" | "users";
 
 type SettingsDrafts = {
   prices: Record<string, string>;
   productNames: Record<string, string>;
   categoryNames: Record<string, string>;
+  timeSlots: Record<string, string>;
 };
 
 const emptyDrafts = (): SettingsDrafts => ({
   prices: {},
   productNames: {},
   categoryNames: {},
+  timeSlots: {},
 });
 
 const SETTINGS_SECTIONS: { id: SettingsSection; label: string; description: string }[] =
@@ -48,6 +55,11 @@ const SETTINGS_SECTIONS: { id: SettingsSection; label: string; description: stri
       description: "Edit category names and category additions.",
     },
     {
+      id: "slots",
+      label: "Time Slots",
+      description: "Add, remove, and edit store time slots.",
+    },
+    {
       id: "users",
       label: "Access Members",
       description: "Add people who can sign in to this store.",
@@ -56,6 +68,7 @@ const SETTINGS_SECTIONS: { id: SettingsSection; label: string; description: stri
 
 export default function SettingsTab() {
   const [cats, setCats] = useState<AdminCategory[]>([]);
+  const [timeSlots, setTimeSlots] = useState<TimeSlotDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [error, setError] = useState("");
@@ -67,7 +80,12 @@ export default function SettingsTab() {
 
   const reload = useCallback(async () => {
     try {
-      setCats(await fetchAdminCategories());
+      const [categories, slots] = await Promise.all([
+        fetchAdminCategories(),
+        fetchTimeSlots(),
+      ]);
+      setCats(categories);
+      setTimeSlots(slots);
       setUnlocked(true);
     } catch (e) {
       setError(String(e));
@@ -140,12 +158,37 @@ export default function SettingsTab() {
     [cats, drafts.categoryNames],
   );
 
+  const changedTimeSlots = useMemo(
+    () =>
+      timeSlots.flatMap((timeSlot) => {
+        const draft = drafts.timeSlots[timeSlot.id];
+        if (draft === undefined) return [];
+        const value = draft.trim();
+        const startHour = Math.floor(Number(value));
+        if (
+          !value ||
+          !Number.isFinite(startHour) ||
+          startHour < 0 ||
+          startHour > 23
+        ) {
+          return [{ id: timeSlot.id, startHour, invalid: true }];
+        }
+        if (startHour === timeSlot.startHour) return [];
+        return [{ id: timeSlot.id, startHour, invalid: false }];
+      }),
+    [timeSlots, drafts.timeSlots],
+  );
+
   const pendingChanges =
-    changedPrices.length + changedProductNames.length + changedCategoryNames.length;
+    changedPrices.length +
+    changedProductNames.length +
+    changedCategoryNames.length +
+    changedTimeSlots.length;
   const hasInvalidDraft =
     changedPrices.some((change) => change.invalid) ||
     changedProductNames.some((change) => change.invalid) ||
-    changedCategoryNames.some((change) => change.invalid);
+    changedCategoryNames.some((change) => change.invalid) ||
+    changedTimeSlots.some((change) => change.invalid);
 
   const handleSaveDrafts = async () => {
     setError("");
@@ -167,6 +210,9 @@ export default function SettingsTab() {
         ),
         ...changedCategoryNames.map((change) =>
           updateCategory(change.id, { name: change.name }),
+        ),
+        ...changedTimeSlots.map((change) =>
+          updateTimeSlot(change.id, { startHour: change.startHour }),
         ),
       ]);
       setDrafts(emptyDrafts());
@@ -199,7 +245,12 @@ export default function SettingsTab() {
           setError("");
           try {
             await unlockSettings(password);
-            setCats(await fetchAdminCategories());
+            const [categories, slots] = await Promise.all([
+              fetchAdminCategories(),
+              fetchTimeSlots(),
+            ]);
+            setCats(categories);
+            setTimeSlots(slots);
             setUnlocked(true);
           } catch (e) {
             setError(String(e));
@@ -212,12 +263,12 @@ export default function SettingsTab() {
   }
 
   return (
-    <div className="pb-24 px-4 py-4 space-y-4">
+    <div className="space-y-4 px-4 pb-44 pt-4">
       <p className="text-sm text-stone-500">
-        Manage menu setup by price, product, and category.
+        Manage menu setup by price, product, category, and time slot.
       </p>
 
-      <div className="grid grid-cols-2 gap-2 rounded-xl border border-stone-200 bg-white p-1 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 rounded-xl border border-stone-200 bg-white p-1 sm:grid-cols-5">
         {SETTINGS_SECTIONS.map((s) => (
           <button
             key={s.id}
@@ -321,6 +372,22 @@ export default function SettingsTab() {
         </>
       )}
 
+      {section === "slots" && (
+        <TimeSlotsSettings
+          slots={timeSlots}
+          busy={busy}
+          drafts={drafts.timeSlots}
+          onSlotChange={(id, value) => {
+            setSavedMessage("");
+            setDrafts((current) => ({
+              ...current,
+              timeSlots: { ...current.timeSlots, [id]: value },
+            }));
+          }}
+          run={run}
+        />
+      )}
+
       {section === "users" && <MembersSettings />}
 
       {section !== "users" && (
@@ -402,6 +469,133 @@ function SettingsUnlockScreen({
         <p className="mt-3 text-xs text-stone-400">
           Initial password is 0000 unless it has been changed.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function TimeSlotsSettings({
+  slots,
+  busy,
+  drafts,
+  onSlotChange,
+  run,
+}: {
+  slots: TimeSlotDTO[];
+  busy: boolean;
+  drafts: Record<string, string>;
+  onSlotChange: (id: string, value: string) => void;
+  run: (fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const [newStartHour, setNewStartHour] = useState("");
+
+  const addSlot = async () => {
+    const value = Math.floor(Number(newStartHour));
+    if (!Number.isFinite(value) || value < 0 || value > 23) return;
+    setNewStartHour("");
+    await run(() => createTimeSlot(value));
+  };
+
+  const removeSlot = async (slot: TimeSlotDTO) => {
+    if (!confirm(`Remove ${slotLabel(slot.startHour)} from input slots?`)) return;
+    await run(() => deleteTimeSlot(slot.id));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Changing a time slot changes which button appears on the Input screen.
+        Existing waste entries keep their original slot hour.
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+        <div className="border-b border-stone-200 bg-stone-50 px-3 py-2">
+          <h3 className="text-base font-bold text-stone-800">Current Slots</h3>
+        </div>
+        <div className="divide-y divide-stone-100">
+          {slots.length === 0 && (
+            <p className="px-3 py-4 text-sm text-stone-400">No time slots.</p>
+          )}
+          {slots.map((slot) => {
+            const draft = drafts[slot.id];
+            const value = draft ?? String(slot.startHour);
+            const parsed = Math.floor(Number(value.trim()));
+            const invalid =
+              draft !== undefined &&
+              (!value.trim() ||
+                !Number.isFinite(parsed) ||
+                parsed < 0 ||
+                parsed > 23);
+            const changed = draft !== undefined && (invalid || parsed !== slot.startHour);
+
+            return (
+              <div
+                key={slot.id}
+                className={`grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2 ${
+                  changed ? "bg-rose-50/40" : ""
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-base font-semibold text-stone-800">
+                    {slotLabel(slot.startHour)}
+                  </p>
+                  <p className="text-xs text-stone-400">Display label</p>
+                </div>
+                <label className="flex items-center gap-2">
+                  <span className="text-xs text-stone-400">Hour</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={23}
+                    value={value}
+                    onChange={(e) => onSlotChange(slot.id, e.target.value)}
+                    disabled={busy}
+                    className={`w-20 rounded border px-2 py-1.5 text-right text-base tabular-nums disabled:bg-stone-100 ${
+                      invalid ? "border-red-300 bg-red-50" : "border-stone-300"
+                    }`}
+                    aria-label={`${slotLabel(slot.startHour)} start hour`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeSlot(slot)}
+                  disabled={busy}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-600 disabled:opacity-40"
+                >
+                  Remove
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-dashed border-stone-300 bg-white p-4">
+        <label className="block text-sm font-semibold text-stone-700 mb-2">
+          Add Time Slot
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={23}
+            value={newStartHour}
+            onChange={(e) => setNewStartHour(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addSlot()}
+            placeholder="14"
+            className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-base"
+          />
+          <button
+            type="button"
+            onClick={addSlot}
+            disabled={busy || !newStartHour.trim()}
+            className="rounded-lg bg-rose-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
       </div>
     </div>
   );

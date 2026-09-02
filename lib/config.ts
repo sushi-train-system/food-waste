@@ -1,17 +1,17 @@
 // アプリ全体で共有する設定・ユーティリティ
 
-/// 2時間ごとのタイムスロット（開始時刻 hour）。
-/// 廃棄入力は 12:00〜22:00 を想定。必要に応じて変更可能。
-export const TIME_SLOTS = [12, 14, 16, 18, 20] as const;
+/// 2時間ごとのデフォルトタイムスロット（開始時刻 hour）。
+/// 店舗ごとの DB 設定がない場合のフォールバック。
+export const TIME_SLOTS = [14, 16, 18, 20, 22] as const;
 
 export type TimeSlot = (typeof TIME_SLOTS)[number];
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const APP_TIME_ZONE = "Australia/Brisbane";
 
-/// スロットのラベル（例: "12:00-14:00"）
+/// スロットのラベル（例: "14:00"）
 export function slotLabel(slot: number): string {
-  return `${pad(slot)}:00–${pad(slot + 2)}:00`;
+  return `${pad(slot)}:00`;
 }
 
 /// 曜日名（日本語）。0=日曜 ... 6=土曜
@@ -38,7 +38,10 @@ export function todayStr(now: Date = new Date()): string {
 }
 
 /// 現在時刻に最も近い（含まれる）タイムスロットを返す
-export function currentSlot(now: Date = new Date()): TimeSlot {
+export function currentSlot(
+  now: Date = new Date(),
+  slots: readonly number[] = TIME_SLOTS,
+): number {
   const h = Number(
     new Intl.DateTimeFormat("en-AU", {
       timeZone: APP_TIME_ZONE,
@@ -47,8 +50,8 @@ export function currentSlot(now: Date = new Date()): TimeSlot {
       hour12: false,
     }).format(now),
   );
-  let best: TimeSlot = TIME_SLOTS[0];
-  for (const s of TIME_SLOTS) {
+  let best = slots[0] ?? TIME_SLOTS[0];
+  for (const s of slots) {
     if (h >= s) best = s;
   }
   return best;

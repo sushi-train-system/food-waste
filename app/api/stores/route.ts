@@ -1,5 +1,9 @@
 import { getCurrentAppUser, authErrorResponse } from "@/lib/auth";
-import { DEFAULT_STORE_SLUG, DEFAULT_STORE_TIMEZONE } from "@/lib/config";
+import {
+  DEFAULT_STORE_SLUG,
+  DEFAULT_STORE_TIMEZONE,
+  TIME_SLOTS,
+} from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 
 function slugify(input: string) {
@@ -59,6 +63,12 @@ export async function POST(request: Request) {
             userId: appUser.id,
             role: "OWNER",
           },
+        },
+        timeSlots: {
+          create: TIME_SLOTS.map((startHour, index) => ({
+            startHour,
+            sortOrder: index,
+          })),
         },
       },
     });

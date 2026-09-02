@@ -8,6 +8,7 @@ import type {
   SaveEntriesBody,
   SessionInfo,
   StoreMember,
+  TimeSlotDTO,
 } from "./types";
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -163,5 +164,29 @@ export function updateMember(
   return jsonFetch<StoreMember>(`/api/members/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),
+  });
+}
+
+export function fetchTimeSlots(): Promise<TimeSlotDTO[]> {
+  return jsonFetch<TimeSlotDTO[]>("/api/time-slots");
+}
+
+export function createTimeSlot(startHour: number) {
+  return jsonFetch<TimeSlotDTO>("/api/time-slots", {
+    method: "POST",
+    body: JSON.stringify({ startHour }),
+  });
+}
+
+export function updateTimeSlot(id: string, data: { startHour?: number; sortOrder?: number }) {
+  return jsonFetch<TimeSlotDTO>(`/api/time-slots/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteTimeSlot(id: string) {
+  return jsonFetch<{ ok: boolean }>(`/api/time-slots/${id}`, {
+    method: "DELETE",
   });
 }

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { TIME_SLOTS } from "@/lib/config";
 import { authErrorResponse, getRequestStore } from "@/lib/auth";
+import { ensureStoreTimeSlots } from "@/lib/time-slots";
 import type { EntryDTO, SaveEntriesBody } from "@/lib/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -18,7 +18,11 @@ export async function GET(request: Request) {
       return Response.json({ error: "invalid date" }, { status: 400 });
     }
     const slot = Number(slotParam);
-    if (!Number.isFinite(slot) || !TIME_SLOTS.includes(slot as never)) {
+    const validSlots = await ensureStoreTimeSlots(store.id);
+    if (
+      !Number.isFinite(slot) ||
+      !validSlots.some((timeSlot) => timeSlot.startHour === slot)
+    ) {
       return Response.json({ error: "invalid slot" }, { status: 400 });
     }
 
@@ -54,7 +58,11 @@ export async function POST(request: Request) {
     if (!date || !DATE_RE.test(date)) {
       return Response.json({ error: "invalid date" }, { status: 400 });
     }
-    if (!Number.isFinite(slot) || !TIME_SLOTS.includes(slot as never)) {
+    const validSlots = await ensureStoreTimeSlots(store.id);
+    if (
+      !Number.isFinite(slot) ||
+      !validSlots.some((timeSlot) => timeSlot.startHour === slot)
+    ) {
       return Response.json({ error: "invalid slot" }, { status: 400 });
     }
     if (!Array.isArray(entries)) {

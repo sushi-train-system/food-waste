@@ -64,6 +64,12 @@ export type StoreMember = {
   updatedAt: string;
 };
 
+export type TimeSlotDTO = {
+  id: string;
+  startHour: number;
+  sortOrder: number;
+};
+
 export type EntryDTO = {
   menuItemId: string;
   quantity: number;
@@ -130,6 +136,13 @@ export type WeekdayPoint = {
   avgAmount: number;
 };
 
+export type TimeSlotPoint = {
+  slot: number;
+  label: string;
+  total: number;
+  amount: number;
+};
+
 export type CategoryBreakdown = {
   name: string;
   total: number;
@@ -149,6 +162,12 @@ export type WeekdayItemBreakdown = {
   items: AnalyticsItemBreakdown[];
 };
 
+export type WeekdayTimeSlotBreakdown = {
+  weekday: number;
+  label: string;
+  slots: TimeSlotPoint[];
+};
+
 export type SameMonthComparison = {
   current: MonthlyPoint;
   previous: MonthlyPoint;
@@ -164,6 +183,8 @@ export type AnalyticsResponse = {
   weekday: WeekdayPoint[];
   byCategory: CategoryBreakdown[];
   itemsByWeekday: WeekdayItemBreakdown[];
+  timeSlots: TimeSlotPoint[];
+  timeSlotsByWeekday: WeekdayTimeSlotBreakdown[];
   sameMonthComparison: SameMonthComparison | null;
   totalCount: number;
   totalAmount: number;

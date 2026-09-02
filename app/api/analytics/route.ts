@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { todayStr, WEEKDAY_LABELS, weekdayIndexFromDate } from "@/lib/config";
+import {
+  slotLabel,
+  todayStr,
+  WEEKDAY_LABELS,
+  weekdayIndexFromDate,
+} from "@/lib/config";
 import { authErrorResponse, getRequestStore } from "@/lib/auth";
 import type {
   AnalyticsResponse,
@@ -7,10 +12,13 @@ import type {
   AnalyticsItemBreakdown,
   MonthlyPoint,
   SameMonthComparison,
+  TimeSlotPoint,
   WeekdayItemBreakdown,
+  WeekdayTimeSlotBreakdown,
   WeekdayPoint,
   YearlyPoint,
 } from "@/lib/types";
+import { ensureStoreTimeSlots } from "@/lib/time-slots";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -117,6 +125,7 @@ export async function GET(request: Request) {
     const end = searchParams.get("end");
     const categorySlug = searchParams.get("category");
     const selectedMonth = sameMonth(start, end);
+    const configuredTimeSlots = await ensureStoreTimeSlots(store.id);
 
     const dateFilter: { gte?: string; lte?: string } = {};
     if (start && DATE_RE.test(start)) dateFilter.gte = start;
@@ -132,6 +141,7 @@ export async function GET(request: Request) {
       },
       select: {
         date: true,
+        slot: true,
         quantity: true,
         menuItem: {
           select: {
@@ -150,6 +160,11 @@ export async function GET(request: Request) {
   const weekdayTotals = new Array(7).fill(0) as number[];
   const weekdayAmounts = new Array(7).fill(0) as number[];
   const categoryMap = new Map<string, { qty: number; amt: number }>();
+  const timeSlotMap = new Map<number, { qty: number; amt: number }>();
+  const weekdayTimeSlotMaps = Array.from(
+    { length: 7 },
+    () => new Map<number, { qty: number; amt: number }>(),
+  );
   const weekdayItemMaps = Array.from(
     { length: 7 },
     () =>
@@ -186,6 +201,19 @@ export async function GET(request: Request) {
     const wd = weekdayIndexFromDate(r.date);
     weekdayTotals[wd] += q;
     weekdayAmounts[wd] += amt;
+
+    const slotValue = timeSlotMap.get(r.slot) ?? { qty: 0, amt: 0 };
+    slotValue.qty += q;
+    slotValue.amt += amt;
+    timeSlotMap.set(r.slot, slotValue);
+
+    const weekdaySlotValue = weekdayTimeSlotMaps[wd].get(r.slot) ?? {
+      qty: 0,
+      amt: 0,
+    };
+    weekdaySlotValue.qty += q;
+    weekdaySlotValue.amt += amt;
+    weekdayTimeSlotMaps[wd].set(r.slot, weekdaySlotValue);
 
     const catName = r.menuItem.category.name;
     const c = categoryMap.get(catName) ?? { qty: 0, amt: 0 };
@@ -267,6 +295,37 @@ export async function GET(request: Request) {
       ),
   }));
 
+  const slotOrder = [
+    ...new Set([
+      ...configuredTimeSlots.map((slot) => slot.startHour),
+      ...timeSlotMap.keys(),
+    ]),
+  ].sort((a, b) => a - b);
+
+  const timeSlots: TimeSlotPoint[] = slotOrder.map((slot) => {
+    const value = timeSlotMap.get(slot) ?? { qty: 0, amt: 0 };
+    return {
+      slot,
+      label: slotLabel(slot),
+      total: value.qty,
+      amount: round2(value.amt),
+    };
+  });
+
+  const timeSlotsByWeekday: WeekdayTimeSlotBreakdown[] = order.map((wd) => ({
+    weekday: wd,
+    label: WEEKDAY_LABELS[wd],
+    slots: slotOrder.map((slot) => {
+      const value = weekdayTimeSlotMaps[wd].get(slot) ?? { qty: 0, amt: 0 };
+      return {
+        slot,
+        label: slotLabel(slot),
+        total: value.qty,
+        amount: round2(value.amt),
+      };
+    }),
+  }));
+
   let sameMonthComparison: SameMonthComparison | null = null;
   if (selectedMonth) {
     const previousMonth = previousYearMonth(selectedMonth);
@@ -293,6 +352,8 @@ export async function GET(request: Request) {
     weekday,
     byCategory,
     itemsByWeekday,
+    timeSlots,
+    timeSlotsByWeekday,
     sameMonthComparison,
     totalCount,
     totalAmount: round2(totalAmount),
