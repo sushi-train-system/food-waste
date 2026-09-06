@@ -48,7 +48,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 const TITLES: Record<Tab, string> = {
-  input: "Waste Entry",
+  input: "Input",
   analytics: "Analytics",
   data: "Data",
   settings: "Menu Settings",
@@ -164,7 +164,6 @@ export default function AppShell() {
         <div className="ml-auto flex items-center gap-3">
           <div className="hidden text-right text-xs opacity-80 sm:block">
             <p>{sessionInfo.store.name}</p>
-            <p>{sessionInfo.user.email}</p>
           </div>
           <span className="text-sm opacity-80">{TITLES[activeTab]}</span>
           <button
