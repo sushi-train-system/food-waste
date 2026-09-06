@@ -46,17 +46,18 @@ model StoreUser {
 
 /// 店舗。試験運用では DEFAULT_STORE_SLUG の1店舗を利用し、将来は店舗を追加する。
 model Store {
-  id                   String       @id @default(cuid())
-  slug                 String       @unique
+  id                   String                 @id @default(cuid())
+  slug                 String                 @unique
   name                 String
-  timezone             String       @default("Australia/Brisbane")
+  timezone             String                 @default("Australia/Brisbane")
   settingsPasswordHash String?
   users                StoreUser[]
   timeSlots            TimeSlot[]
   categories           Category[]
   items                MenuItem[]
+  priceHistory         MenuItemPriceHistory[]
   entries              WasteEntry[]
-  createdAt            DateTime     @default(now())
+  createdAt            DateTime               @default(now())
 }
 
 /// 店舗ごとの入力タイムスロット。WasteEntry.slot は startHour を保持する。
@@ -66,6 +67,7 @@ model TimeSlot {
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   startHour Int
   sortOrder Int      @default(0)
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -81,6 +83,7 @@ model Category {
   slug      String // nigiri, roll, gunkan ...
   name      String // 表示名（にぎり など）
   sortOrder Int        @default(0)
+  active    Boolean    @default(true)
   items     MenuItem[]
   createdAt DateTime   @default(now())
 
@@ -90,35 +93,52 @@ model Category {
 
 /// 個々のメニュー（マグロ、サーモン など）
 model MenuItem {
-  id         String       @id @default(cuid())
-  storeId    String
-  store      Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  name       String
-  priceAud   Float        @default(5) // 単価（AUD）。廃棄額 = quantity × priceAud
-  categoryId String
-  category   Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  sortOrder  Int          @default(0)
-  active     Boolean      @default(true)
-  entries    WasteEntry[]
-  createdAt  DateTime     @default(now())
+  id           String                 @id @default(cuid())
+  storeId      String
+  store        Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name         String
+  priceAud     Float                  @default(5) // 単価（AUD）。廃棄額 = quantity × priceAud
+  categoryId   String
+  category     Category               @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sortOrder    Int                    @default(0)
+  active       Boolean                @default(true)
+  entries      WasteEntry[]
+  priceHistory MenuItemPriceHistory[]
+  createdAt    DateTime               @default(now())
 
   @@index([storeId])
   @@index([categoryId])
 }
 
+/// 商品価格の履歴。価格変更時だけ増え、月末価格出力で参照する。
+model MenuItemPriceHistory {
+  id            String   @id @default(cuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  menuItemId    String
+  menuItem      MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  priceAud      Float
+  effectiveFrom String // YYYY-MM-DD
+  createdAt     DateTime @default(now())
+
+  @@unique([menuItemId, effectiveFrom])
+  @@index([storeId, menuItemId, effectiveFrom])
+}
+
 /// 2時間ごとの廃棄数入力レコード（生データ）
 /// slot は営業時間帯の開始時刻(hour)。例: 10,12,14,16,18,20
 model WasteEntry {
-  id         String   @id @default(cuid())
-  storeId    String
-  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  menuItemId String
-  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
-  date       String // YYYY-MM-DD（店舗ローカル日付）
-  slot       Int // 2時間スロットの開始時刻(hour)
-  quantity   Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String   @id @default(cuid())
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  menuItemId   String
+  menuItem     MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  date         String // YYYY-MM-DD（店舗ローカル日付）
+  slot         Int // 2時間スロットの開始時刻(hour)
+  quantity     Int      @default(0)
+  unitPriceAud Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([storeId, menuItemId, date, slot])
   @@index([storeId, date])

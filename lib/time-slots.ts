@@ -36,10 +36,12 @@ export function toTimeSlotDTO(slot: {
   id: string;
   startHour: number;
   sortOrder: number;
+  active?: boolean;
 }): TimeSlotDTO {
   return {
     id: slot.id,
     startHour: slot.startHour,
     sortOrder: slot.sortOrder,
+    active: slot.active ?? true,
   };
 }

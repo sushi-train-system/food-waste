@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const store = await getRequestStore();
     const categories = await prisma.category.findMany({
-      where: { storeId: store.id },
+      where: { storeId: store.id, active: true },
       orderBy: { sortOrder: "asc" },
       include: {
         items: {
@@ -21,6 +21,7 @@ export async function GET() {
       slug: c.slug,
       name: c.name,
       sortOrder: c.sortOrder,
+      active: c.active,
       items: c.items.map((i) => ({
         id: i.id,
         name: i.name,

@@ -102,7 +102,7 @@ async function aggregateMonth(
     },
     select: {
       quantity: true,
-      menuItem: { select: { priceAud: true } },
+      unitPriceAud: true,
     },
   });
 
@@ -110,7 +110,7 @@ async function aggregateMonth(
   let amount = 0;
   for (const row of rows) {
     total += row.quantity;
-    amount += row.quantity * row.menuItem.priceAud;
+    amount += row.quantity * row.unitPriceAud;
   }
 
   return { period: month, total, amount: round2(amount) };
@@ -125,7 +125,9 @@ export async function GET(request: Request) {
     const end = searchParams.get("end");
     const categorySlug = searchParams.get("category");
     const selectedMonth = sameMonth(start, end);
-    const configuredTimeSlots = await ensureStoreTimeSlots(store.id);
+    const configuredTimeSlots = (await ensureStoreTimeSlots(store.id)).filter(
+      (slot) => slot.active !== false,
+    );
 
     const dateFilter: { gte?: string; lte?: string } = {};
     if (start && DATE_RE.test(start)) dateFilter.gte = start;
@@ -147,10 +149,10 @@ export async function GET(request: Request) {
           select: {
             id: true,
             name: true,
-            priceAud: true,
             category: { select: { name: true } },
           },
         },
+        unitPriceAud: true,
       },
       orderBy: { date: "asc" },
     });
@@ -181,7 +183,7 @@ export async function GET(request: Request) {
 
   for (const r of rows) {
     const q = r.quantity;
-    const amt = q * r.menuItem.priceAud;
+    const amt = q * r.unitPriceAud;
     totalCount += q;
     totalAmount += amt;
 

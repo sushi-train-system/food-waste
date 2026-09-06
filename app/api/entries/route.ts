@@ -18,7 +18,9 @@ export async function GET(request: Request) {
       return Response.json({ error: "invalid date" }, { status: 400 });
     }
     const slot = Number(slotParam);
-    const validSlots = await ensureStoreTimeSlots(store.id);
+    const validSlots = (await ensureStoreTimeSlots(store.id)).filter(
+      (timeSlot) => timeSlot.active !== false,
+    );
     if (
       !Number.isFinite(slot) ||
       !validSlots.some((timeSlot) => timeSlot.startHour === slot)
@@ -58,7 +60,9 @@ export async function POST(request: Request) {
     if (!date || !DATE_RE.test(date)) {
       return Response.json({ error: "invalid date" }, { status: 400 });
     }
-    const validSlots = await ensureStoreTimeSlots(store.id);
+    const validSlots = (await ensureStoreTimeSlots(store.id)).filter(
+      (timeSlot) => timeSlot.active !== false,
+    );
     if (
       !Number.isFinite(slot) ||
       !validSlots.some((timeSlot) => timeSlot.startHour === slot)
@@ -72,12 +76,13 @@ export async function POST(request: Request) {
     const menuItemIds = entries.map((e) => e.menuItemId);
     const validItems = await prisma.menuItem.findMany({
       where: { storeId: store.id, id: { in: menuItemIds } },
-      select: { id: true },
+      select: { id: true, priceAud: true },
     });
-    const validItemIds = new Set(validItems.map((i) => i.id));
+    const validItemPrices = new Map(validItems.map((i) => [i.id, i.priceAud]));
 
     const ops = entries.flatMap((e) => {
-      if (!validItemIds.has(e.menuItemId)) return [];
+      const unitPriceAud = validItemPrices.get(e.menuItemId);
+      if (unitPriceAud === undefined) return [];
       const quantity = Math.max(0, Math.floor(Number(e.quantity) || 0));
       if (quantity <= 0) {
         return prisma.wasteEntry.deleteMany({
@@ -93,13 +98,14 @@ export async function POST(request: Request) {
             slot,
           },
         },
-        update: { quantity },
+        update: { quantity, unitPriceAud },
         create: {
           storeId: store.id,
           menuItemId: e.menuItemId,
           date,
           slot,
           quantity,
+          unitPriceAud,
         },
       });
     });

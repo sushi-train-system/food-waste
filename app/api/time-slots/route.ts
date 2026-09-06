@@ -10,11 +10,17 @@ import {
   toTimeSlotDTO,
 } from "@/lib/time-slots";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const context = await getCurrentStoreContext();
+    const { searchParams } = new URL(request.url);
+    const includeInactive = searchParams.get("includeInactive") === "1";
     const slots = await ensureStoreTimeSlots(context.store.id);
-    return Response.json(slots.map(toTimeSlotDTO));
+    return Response.json(
+      slots
+        .filter((slot) => includeInactive || slot.active !== false)
+        .map(toTimeSlotDTO),
+    );
   } catch (error) {
     return authErrorResponse(error);
   }

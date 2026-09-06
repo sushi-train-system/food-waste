@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { fetchAnalytics } from "@/lib/api";
+import { errorMessage, fetchAnalytics } from "@/lib/api";
 import { formatAud, formatMonthLabel, todayStr, yearRange } from "@/lib/config";
 import MonthPicker from "./MonthPicker";
 import type {
@@ -138,7 +138,7 @@ export default function AnalyticsTab() {
         setData(current);
         setComparisonData(comparison);
       })
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   }, [preset, month, compareMonth]);
 

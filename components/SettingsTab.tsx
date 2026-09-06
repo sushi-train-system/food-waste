@@ -6,7 +6,7 @@ import {
   createItem,
   createTimeSlot,
   changeSettingsPassword,
-  deleteTimeSlot,
+  errorMessage,
   fetchMembers,
   fetchAdminCategories,
   fetchTimeSlots,
@@ -26,15 +26,21 @@ type SettingsSection = "prices" | "products" | "categories" | "slots" | "users";
 type SettingsDrafts = {
   prices: Record<string, string>;
   productNames: Record<string, string>;
+  productActive: Record<string, boolean>;
   categoryNames: Record<string, string>;
+  categoryActive: Record<string, boolean>;
   timeSlots: Record<string, string>;
+  timeSlotActive: Record<string, boolean>;
 };
 
 const emptyDrafts = (): SettingsDrafts => ({
   prices: {},
   productNames: {},
+  productActive: {},
   categoryNames: {},
+  categoryActive: {},
   timeSlots: {},
+  timeSlotActive: {},
 });
 
 const SETTINGS_SECTIONS: { id: SettingsSection; label: string; description: string }[] =
@@ -70,27 +76,43 @@ export default function SettingsTab() {
   const [cats, setCats] = useState<AdminCategory[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlotDTO[]>([]);
   const [loading, setLoading] = useState(false);
+  const [sectionLoading, setSectionLoading] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [error, setError] = useState("");
   const [newCatName, setNewCatName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [section, setSection] = useState<SettingsSection>("prices");
+  const [section, setSection] = useState<SettingsSection | null>(null);
   const [drafts, setDrafts] = useState<SettingsDrafts>(() => emptyDrafts());
   const [savedMessage, setSavedMessage] = useState("");
+  const activeCats = cats.filter((cat) => cat.active);
+  const inactiveCats = cats.filter((cat) => !cat.active);
 
-  const reload = useCallback(async () => {
+  const loadMenuSetup = useCallback(async () => {
+    if (cats.length > 0) return;
+    setCats(await fetchAdminCategories());
+  }, [cats.length]);
+
+  const loadTimeSlotSetup = useCallback(async () => {
+    if (timeSlots.length > 0) return;
+    setTimeSlots(await fetchTimeSlots({ includeInactive: true }));
+  }, [timeSlots.length]);
+
+  const reloadCurrentSection = useCallback(async () => {
     try {
-      const [categories, slots] = await Promise.all([
-        fetchAdminCategories(),
-        fetchTimeSlots(),
-      ]);
-      setCats(categories);
-      setTimeSlots(slots);
-      setUnlocked(true);
+      if (
+        section === "prices" ||
+        section === "products" ||
+        section === "categories"
+      ) {
+        setCats(await fetchAdminCategories());
+      }
+      if (section === "slots") {
+        setTimeSlots(await fetchTimeSlots({ includeInactive: true }));
+      }
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     }
-  }, []);
+  }, [section]);
 
   useEffect(() => {
     return () => {
@@ -104,9 +126,9 @@ export default function SettingsTab() {
     setSavedMessage("");
     try {
       await fn();
-      await reload();
+      await reloadCurrentSection();
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -145,6 +167,18 @@ export default function SettingsTab() {
     [cats, drafts.productNames],
   );
 
+  const changedProductActive = useMemo(
+    () =>
+      cats.flatMap((cat) =>
+        cat.items.flatMap((item) => {
+          const active = drafts.productActive[item.id];
+          if (active === undefined || active === item.active) return [];
+          return [{ id: item.id, active }];
+        }),
+      ),
+    [cats, drafts.productActive],
+  );
+
   const changedCategoryNames = useMemo(
     () =>
       cats.flatMap((cat) => {
@@ -156,6 +190,16 @@ export default function SettingsTab() {
         return [{ id: cat.id, name, invalid: false }];
       }),
     [cats, drafts.categoryNames],
+  );
+
+  const changedCategoryActive = useMemo(
+    () =>
+      cats.flatMap((cat) => {
+        const active = drafts.categoryActive[cat.id];
+        if (active === undefined || active === cat.active) return [];
+        return [{ id: cat.id, active }];
+      }),
+    [cats, drafts.categoryActive],
   );
 
   const changedTimeSlots = useMemo(
@@ -179,11 +223,26 @@ export default function SettingsTab() {
     [timeSlots, drafts.timeSlots],
   );
 
+  const changedTimeSlotActive = useMemo(
+    () =>
+      timeSlots.flatMap((timeSlot) => {
+        const active = drafts.timeSlotActive[timeSlot.id];
+        if (active === undefined || active === (timeSlot.active ?? true)) {
+          return [];
+        }
+        return [{ id: timeSlot.id, active }];
+      }),
+    [timeSlots, drafts.timeSlotActive],
+  );
+
   const pendingChanges =
     changedPrices.length +
     changedProductNames.length +
+    changedProductActive.length +
     changedCategoryNames.length +
-    changedTimeSlots.length;
+    changedCategoryActive.length +
+    changedTimeSlots.length +
+    changedTimeSlotActive.length;
   const hasInvalidDraft =
     changedPrices.some((change) => change.invalid) ||
     changedProductNames.some((change) => change.invalid) ||
@@ -201,25 +260,68 @@ export default function SettingsTab() {
 
     setBusy(true);
     try {
+      const itemUpdates = new Map<
+        string,
+        { priceAud?: number; name?: string; active?: boolean }
+      >();
+      const updateItemDraft = (
+        id: string,
+        data: { priceAud?: number; name?: string; active?: boolean },
+      ) => {
+        itemUpdates.set(id, { ...itemUpdates.get(id), ...data });
+      };
+      changedPrices.forEach((change) =>
+        updateItemDraft(change.id, { priceAud: change.priceAud }),
+      );
+      changedProductNames.forEach((change) =>
+        updateItemDraft(change.id, { name: change.name }),
+      );
+      changedProductActive.forEach((change) =>
+        updateItemDraft(change.id, { active: change.active }),
+      );
+
       await Promise.all([
-        ...changedPrices.map((change) =>
-          updateItem(change.id, { priceAud: change.priceAud }),
+        ...Array.from(itemUpdates.entries()).map(([id, data]) =>
+          updateItem(id, data),
         ),
-        ...changedProductNames.map((change) =>
-          updateItem(change.id, { name: change.name }),
-        ),
-        ...changedCategoryNames.map((change) =>
-          updateCategory(change.id, { name: change.name }),
-        ),
-        ...changedTimeSlots.map((change) =>
-          updateTimeSlot(change.id, { startHour: change.startHour }),
-        ),
+        ...cats
+          .flatMap((cat) => {
+            const nameChange = changedCategoryNames.find(
+              (change) => change.id === cat.id,
+            );
+            const activeChange = changedCategoryActive.find(
+              (change) => change.id === cat.id,
+            );
+            if (!nameChange && !activeChange) return [];
+            return [
+              updateCategory(cat.id, {
+                ...(nameChange ? { name: nameChange.name } : {}),
+                ...(activeChange ? { active: activeChange.active } : {}),
+              }),
+            ];
+          }),
+        ...timeSlots
+          .flatMap((timeSlot) => {
+            const slotChange = changedTimeSlots.find(
+              (change) => change.id === timeSlot.id,
+            );
+            const activeChange = changedTimeSlotActive.find(
+              (change) => change.id === timeSlot.id,
+            );
+            if (!slotChange && !activeChange) return [];
+            return [
+              updateTimeSlot(timeSlot.id, {
+                ...(slotChange ? { startHour: slotChange.startHour } : {}),
+                ...(activeChange ? { active: activeChange.active } : {}),
+              }),
+            ];
+          }),
       ]);
       setDrafts(emptyDrafts());
-      await reload();
+      await reloadCurrentSection();
       setSavedMessage("Changes saved.");
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -232,6 +334,38 @@ export default function SettingsTab() {
     await run(() => createCategory(name));
   };
 
+  const openSection = async (nextSection: SettingsSection) => {
+    setError("");
+    setSavedMessage("");
+    setSection(nextSection);
+    setSectionLoading(true);
+    try {
+      if (
+        nextSection === "prices" ||
+        nextSection === "products" ||
+        nextSection === "categories"
+      ) {
+        await loadMenuSetup();
+      }
+      if (nextSection === "slots") {
+        await loadTimeSlotSetup();
+      }
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setSectionLoading(false);
+    }
+  };
+
+  const closeSection = () => {
+    setError("");
+    setSavedMessage("");
+    setDrafts(emptyDrafts());
+    setSection(null);
+  };
+
+  const currentSection = SETTINGS_SECTIONS.find((s) => s.id === section);
+
   if (loading) {
     return <div className="p-6 text-center text-stone-500">Loading...</div>;
   }
@@ -240,20 +374,15 @@ export default function SettingsTab() {
     return (
       <SettingsUnlockScreen
         error={error}
+        onClearError={() => setError("")}
         onUnlock={async (password) => {
           setLoading(true);
           setError("");
           try {
             await unlockSettings(password);
-            const [categories, slots] = await Promise.all([
-              fetchAdminCategories(),
-              fetchTimeSlots(),
-            ]);
-            setCats(categories);
-            setTimeSlots(slots);
             setUnlocked(true);
           } catch (e) {
-            setError(String(e));
+            setError(errorMessage(e));
           } finally {
             setLoading(false);
           }
@@ -264,133 +393,251 @@ export default function SettingsTab() {
 
   return (
     <div className="space-y-4 px-4 pb-44 pt-4">
-      <p className="text-sm text-stone-500">
-        Manage menu setup by price, product, category, and time slot.
-      </p>
-
-      <div className="grid grid-cols-2 gap-2 rounded-xl border border-stone-200 bg-white p-1 sm:grid-cols-5">
-        {SETTINGS_SECTIONS.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => setSection(s.id)}
-            className={`rounded-lg px-2 py-2 text-center text-sm font-semibold transition-colors ${
-              section === s.id
-                ? "bg-rose-800 text-white"
-                : "text-stone-600 hover:bg-stone-100"
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      <p className="text-xs text-stone-500">
-        {SETTINGS_SECTIONS.find((s) => s.id === section)?.description}
-      </p>
-
-      {error && (
-        <p className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600 break-all">
-          {error}
-        </p>
-      )}
-
-      {section === "prices" && (
-        <PriceChanges
-          cats={cats}
-          busy={busy}
-          drafts={drafts.prices}
-          onPriceChange={(id, value) => {
-            setSavedMessage("");
-            setDrafts((current) => ({
-              ...current,
-              prices: { ...current.prices, [id]: value },
-            }));
-          }}
-        />
-      )}
-
-      {section === "products" &&
-        cats.map((cat) => (
-          <ProductCategoryCard
-            key={cat.id}
-            cat={cat}
-            busy={busy}
-            drafts={drafts.productNames}
-            onProductNameChange={(id, value) => {
-              setSavedMessage("");
-              setDrafts((current) => ({
-                ...current,
-                productNames: { ...current.productNames, [id]: value },
-              }));
-            }}
-            run={run}
-          />
-        ))}
-
-      {section === "categories" && (
+      {section === null ? (
         <>
-          {cats.map((cat) => (
-            <CategorySettingsCard
-              key={cat.id}
-              cat={cat}
-              value={drafts.categoryNames[cat.id] ?? cat.name}
-              changed={
-                drafts.categoryNames[cat.id] !== undefined &&
-                drafts.categoryNames[cat.id].trim() !== cat.name
-              }
-              onChange={(value) => {
+          <div>
+            <h2 className="text-xl font-bold text-stone-900">Settings Menu</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Select only the setup area you want to manage.
+            </p>
+          </div>
+
+          {error && (
+            <p className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600 break-all">
+              {error}
+            </p>
+          )}
+
+          <div className="space-y-2">
+            {SETTINGS_SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => openSection(s.id)}
+                disabled={sectionLoading}
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-4 text-left shadow-sm transition-colors hover:bg-stone-50 disabled:opacity-50"
+              >
+                <span className="min-w-0">
+                  <span className="block text-base font-bold text-stone-800">
+                    {s.label}
+                  </span>
+                  <span className="mt-1 block text-sm text-stone-500">
+                    {s.description}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xl font-semibold text-stone-300">
+                  &gt;
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={closeSection}
+              disabled={busy || sectionLoading}
+              className="mt-0.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-bold text-stone-600 shadow-sm disabled:opacity-40"
+              aria-label="Back to settings menu"
+            >
+              &lt;
+            </button>
+            <div className="min-w-0">
+              <h2 className="text-xl font-bold text-stone-900">
+                {currentSection?.label}
+              </h2>
+              <p className="mt-1 text-sm text-stone-500">
+                {currentSection?.description}
+              </p>
+            </div>
+          </div>
+
+          {error && (
+            <p className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600 break-all">
+              {error}
+            </p>
+          )}
+
+          {sectionLoading && (
+            <div className="rounded-xl border border-stone-200 bg-white p-6 text-center text-sm text-stone-500">
+              Loading...
+            </div>
+          )}
+
+          {!sectionLoading && section === "prices" && (
+            <PriceChanges
+              cats={cats}
+              busy={busy}
+              drafts={drafts.prices}
+              onPriceChange={(id, value) => {
                 setSavedMessage("");
                 setDrafts((current) => ({
                   ...current,
-                  categoryNames: { ...current.categoryNames, [cat.id]: value },
+                  prices: { ...current.prices, [id]: value },
                 }));
               }}
             />
-          ))}
+          )}
 
-          <div className="rounded-xl border border-dashed border-stone-300 bg-white p-4">
-            <label className="block text-sm font-semibold text-stone-700 mb-2">
-              Add Category
-            </label>
-            <div className="flex gap-2">
-              <input
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                placeholder="e.g. Side Dishes"
-                className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-base"
+          {!sectionLoading &&
+            section === "products" &&
+            activeCats.map((cat) => (
+              <ProductCategoryCard
+                key={cat.id}
+                cat={cat}
+                busy={busy}
+                drafts={drafts.productNames}
+                activeDrafts={drafts.productActive}
+                onProductNameChange={(id, value) => {
+                  setSavedMessage("");
+                  setDrafts((current) => ({
+                    ...current,
+                    productNames: { ...current.productNames, [id]: value },
+                  }));
+                }}
+                onProductActiveChange={(id, active) => {
+                  setSavedMessage("");
+                  setDrafts((current) => ({
+                    ...current,
+                    productActive: { ...current.productActive, [id]: active },
+                  }));
+                }}
+                run={run}
               />
-              <button
-                onClick={handleAddCategory}
-                disabled={busy || !newCatName.trim()}
-                className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
-              >
-                Add
-              </button>
-            </div>
-          </div>
+            ))}
+
+          {!sectionLoading && section === "categories" && (
+            <>
+              {activeCats.map((cat) => (
+                <CategorySettingsCard
+                  key={cat.id}
+                  cat={cat}
+                  busy={busy}
+                  value={drafts.categoryNames[cat.id] ?? cat.name}
+                  active={drafts.categoryActive[cat.id] ?? cat.active}
+                  changed={
+                    (drafts.categoryNames[cat.id] !== undefined &&
+                      drafts.categoryNames[cat.id].trim() !== cat.name) ||
+                    (drafts.categoryActive[cat.id] !== undefined &&
+                      drafts.categoryActive[cat.id] !== cat.active)
+                  }
+                  onChange={(value) => {
+                    setSavedMessage("");
+                    setDrafts((current) => ({
+                      ...current,
+                      categoryNames: { ...current.categoryNames, [cat.id]: value },
+                    }));
+                  }}
+                  onActiveChange={(active) => {
+                    setSavedMessage("");
+                    setDrafts((current) => ({
+                      ...current,
+                      categoryActive: {
+                        ...current.categoryActive,
+                        [cat.id]: active,
+                      },
+                    }));
+                  }}
+                />
+              ))}
+
+              <div className="rounded-xl border border-dashed border-stone-300 bg-white p-4">
+                <label className="block text-sm font-semibold text-stone-700 mb-2">
+                  Add Category
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    placeholder="e.g. Side Dishes"
+                    className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-base"
+                  />
+                  <button
+                    onClick={handleAddCategory}
+                    disabled={busy || !newCatName.trim()}
+                    className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {inactiveCats.length > 0 && (
+                <div className="space-y-2">
+                  <p className="px-1 text-xs font-semibold uppercase tracking-wide text-stone-400">
+                    Hidden Categories
+                  </p>
+                  {inactiveCats.map((cat) => (
+                    <CategorySettingsCard
+                      key={cat.id}
+                      cat={cat}
+                      busy={busy}
+                      value={drafts.categoryNames[cat.id] ?? cat.name}
+                      active={drafts.categoryActive[cat.id] ?? cat.active}
+                      changed={
+                        (drafts.categoryNames[cat.id] !== undefined &&
+                          drafts.categoryNames[cat.id].trim() !== cat.name) ||
+                        (drafts.categoryActive[cat.id] !== undefined &&
+                          drafts.categoryActive[cat.id] !== cat.active)
+                      }
+                      onChange={(value) => {
+                        setSavedMessage("");
+                        setDrafts((current) => ({
+                          ...current,
+                          categoryNames: {
+                            ...current.categoryNames,
+                            [cat.id]: value,
+                          },
+                        }));
+                      }}
+                      onActiveChange={(active) => {
+                        setSavedMessage("");
+                        setDrafts((current) => ({
+                          ...current,
+                          categoryActive: {
+                            ...current.categoryActive,
+                            [cat.id]: active,
+                          },
+                        }));
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {!sectionLoading && section === "slots" && (
+            <TimeSlotsSettings
+              slots={timeSlots}
+              busy={busy}
+              drafts={drafts.timeSlots}
+              activeDrafts={drafts.timeSlotActive}
+              onSlotChange={(id, value) => {
+                setSavedMessage("");
+                setDrafts((current) => ({
+                  ...current,
+                  timeSlots: { ...current.timeSlots, [id]: value },
+                }));
+              }}
+              onSlotActiveChange={(id, active) => {
+                setSavedMessage("");
+                setDrafts((current) => ({
+                  ...current,
+                  timeSlotActive: { ...current.timeSlotActive, [id]: active },
+                }));
+              }}
+              run={run}
+            />
+          )}
+
+          {!sectionLoading && section === "users" && <MembersSettings />}
         </>
       )}
 
-      {section === "slots" && (
-        <TimeSlotsSettings
-          slots={timeSlots}
-          busy={busy}
-          drafts={drafts.timeSlots}
-          onSlotChange={(id, value) => {
-            setSavedMessage("");
-            setDrafts((current) => ({
-              ...current,
-              timeSlots: { ...current.timeSlots, [id]: value },
-            }));
-          }}
-          run={run}
-        />
-      )}
-
-      {section === "users" && <MembersSettings />}
-
-      {section !== "users" && (
+      {section !== null && section !== "users" && (
         <div className="fixed bottom-16 inset-x-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-3 shadow-[0_-4px_18px_rgba(0,0,0,0.08)] backdrop-blur">
           <div className="mx-auto flex max-w-3xl items-center gap-3">
             {savedMessage && (
@@ -419,13 +666,16 @@ export default function SettingsTab() {
 
 function SettingsUnlockScreen({
   error,
+  onClearError,
   onUnlock,
 }: {
   error: string;
+  onClearError: () => void;
   onUnlock: (password: string) => Promise<void>;
 }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const message = settingsUnlockMessage(error);
 
   const submit = async () => {
     if (!password) return;
@@ -447,16 +697,23 @@ function SettingsUnlockScreen({
         <input
           type="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            if (message) onClearError();
+          }}
           onKeyDown={(e) => e.key === "Enter" && submit()}
           placeholder="Settings password"
-          className="mt-4 w-full rounded-lg border border-stone-300 px-3 py-3 text-base"
+          aria-invalid={Boolean(message)}
+          className={`mt-4 w-full rounded-lg border px-3 py-3 text-base ${
+            message ? "border-red-400 bg-red-50/40" : "border-stone-300"
+          }`}
           autoFocus
         />
-        {error && (
-          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-600 break-all">
-            {error}
-          </p>
+        {message && (
+          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <p className="font-semibold">{message.title}</p>
+            <p className="mt-1 text-red-600">{message.body}</p>
+          </div>
         )}
         <button
           type="button"
@@ -474,20 +731,66 @@ function SettingsUnlockScreen({
   );
 }
 
+function settingsUnlockMessage(error: string) {
+  if (!error) return null;
+  if (
+    error.includes("invalid settings password") ||
+    error.includes("Settings password is incorrect")
+  ) {
+    return {
+      title: "Incorrect password",
+      body: "Please check the settings password and try again.",
+    };
+  }
+  if (
+    error.includes("store access required") ||
+    error.includes("Store access is required")
+  ) {
+    return {
+      title: "Store access is not set up",
+      body: "Please sign in with a user that belongs to this store.",
+    };
+  }
+  if (
+    error.includes("authentication required") ||
+    error.includes("Please sign in again")
+  ) {
+    return {
+      title: "Sign in required",
+      body: "Please sign in again before opening settings.",
+    };
+  }
+  return {
+    title: "Settings could not be opened",
+    body: "Please try again. If this keeps happening, contact the administrator.",
+  };
+}
+
 function TimeSlotsSettings({
   slots,
   busy,
   drafts,
+  activeDrafts,
   onSlotChange,
+  onSlotActiveChange,
   run,
 }: {
   slots: TimeSlotDTO[];
   busy: boolean;
   drafts: Record<string, string>;
+  activeDrafts: Record<string, boolean>;
   onSlotChange: (id: string, value: string) => void;
+  onSlotActiveChange: (id: string, active: boolean) => void;
   run: (fn: () => Promise<unknown>) => Promise<void>;
 }) {
   const [newStartHour, setNewStartHour] = useState("");
+  const isActive = (slot: TimeSlotDTO) =>
+    activeDrafts[slot.id] ?? slot.active ?? true;
+  const savedActive = (slot: TimeSlotDTO) => slot.active ?? true;
+  const activeSlots = slots.filter((slot) => savedActive(slot));
+  const inactiveSlots = slots.filter(
+    (slot) => !savedActive(slot),
+  );
 
   const addSlot = async () => {
     const value = Math.floor(Number(newStartHour));
@@ -496,16 +799,11 @@ function TimeSlotsSettings({
     await run(() => createTimeSlot(value));
   };
 
-  const removeSlot = async (slot: TimeSlotDTO) => {
-    if (!confirm(`Remove ${slotLabel(slot.startHour)} from input slots?`)) return;
-    await run(() => deleteTimeSlot(slot.id));
-  };
-
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        Changing a time slot changes which button appears on the Input screen.
-        Existing waste entries keep their original slot hour.
+        Active time slots appear on the Input screen. Existing waste entries
+        keep their original slot hour even if a slot is hidden.
       </div>
 
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
@@ -513,12 +811,14 @@ function TimeSlotsSettings({
           <h3 className="text-base font-bold text-stone-800">Current Slots</h3>
         </div>
         <div className="divide-y divide-stone-100">
-          {slots.length === 0 && (
+          {activeSlots.length === 0 && (
             <p className="px-3 py-4 text-sm text-stone-400">No time slots.</p>
           )}
-          {slots.map((slot) => {
+          {activeSlots.map((slot) => {
             const draft = drafts[slot.id];
             const value = draft ?? String(slot.startHour);
+            const active = isActive(slot);
+            const savedActive = slot.active ?? true;
             const parsed = Math.floor(Number(value.trim()));
             const invalid =
               draft !== undefined &&
@@ -526,7 +826,10 @@ function TimeSlotsSettings({
                 !Number.isFinite(parsed) ||
                 parsed < 0 ||
                 parsed > 23);
-            const changed = draft !== undefined && (invalid || parsed !== slot.startHour);
+            const changed =
+              (draft !== undefined && (invalid || parsed !== slot.startHour)) ||
+              (activeDrafts[slot.id] !== undefined &&
+                activeDrafts[slot.id] !== savedActive);
 
             return (
               <div
@@ -536,7 +839,11 @@ function TimeSlotsSettings({
                 }`}
               >
                 <div className="min-w-0">
-                  <p className="truncate text-base font-semibold text-stone-800">
+                  <p
+                    className={`truncate text-base font-semibold ${
+                      active ? "text-stone-800" : "text-stone-400 line-through"
+                    }`}
+                  >
                     {slotLabel(slot.startHour)}
                   </p>
                   <p className="text-xs text-stone-400">Display label</p>
@@ -559,17 +866,105 @@ function TimeSlotsSettings({
                 </label>
                 <button
                   type="button"
-                  onClick={() => removeSlot(slot)}
+                  onClick={() => onSlotActiveChange(slot.id, !active)}
                   disabled={busy}
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-600 disabled:opacity-40"
+                  className={`relative h-8 w-14 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
+                    active ? "bg-emerald-500" : "bg-stone-300"
+                  }`}
+                  role="switch"
+                  aria-checked={active}
+                  aria-label={`${slotLabel(slot.startHour)} ${active ? "Active" : "Inactive"}`}
                 >
-                  Remove
+                  <span
+                    className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                      active ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
                 </button>
               </div>
             );
           })}
         </div>
       </div>
+
+      {inactiveSlots.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50/70">
+          <div className="border-b border-stone-200 px-3 py-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+              Hidden Time Slots
+            </h3>
+          </div>
+          <div className="divide-y divide-stone-100">
+            {inactiveSlots.map((slot) => {
+              const draft = drafts[slot.id];
+              const value = draft ?? String(slot.startHour);
+              const active = isActive(slot);
+              const savedActive = slot.active ?? true;
+              const parsed = Math.floor(Number(value.trim()));
+              const invalid =
+                draft !== undefined &&
+                (!value.trim() ||
+                  !Number.isFinite(parsed) ||
+                  parsed < 0 ||
+                  parsed > 23);
+              const changed =
+                (draft !== undefined &&
+                  (invalid || parsed !== slot.startHour)) ||
+                (activeDrafts[slot.id] !== undefined &&
+                  activeDrafts[slot.id] !== savedActive);
+
+              return (
+                <div
+                  key={slot.id}
+                  className={`grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2 ${
+                    changed ? "bg-rose-50/40" : ""
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold text-stone-400 line-through">
+                      {slotLabel(slot.startHour)}
+                    </p>
+                    <p className="text-xs text-stone-400">Hidden from input</p>
+                  </div>
+                  <label className="flex items-center gap-2">
+                    <span className="text-xs text-stone-400">Hour</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={23}
+                      value={value}
+                      onChange={(e) => onSlotChange(slot.id, e.target.value)}
+                      disabled={busy}
+                      className={`w-20 rounded border px-2 py-1.5 text-right text-base tabular-nums disabled:bg-stone-100 ${
+                        invalid ? "border-red-300 bg-red-50" : "border-stone-300"
+                      }`}
+                      aria-label={`${slotLabel(slot.startHour)} start hour`}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => onSlotActiveChange(slot.id, !active)}
+                    disabled={busy}
+                    className={`relative h-8 w-14 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
+                      active ? "bg-emerald-500" : "bg-stone-300"
+                    }`}
+                    role="switch"
+                    aria-checked={active}
+                    aria-label={`${slotLabel(slot.startHour)} ${active ? "Active" : "Inactive"}`}
+                  >
+                    <span
+                      className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                        active ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border border-dashed border-stone-300 bg-white p-4">
         <label className="block text-sm font-semibold text-stone-700 mb-2">
@@ -610,6 +1005,7 @@ function MembersSettings() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [activeDrafts, setActiveDrafts] = useState<Record<string, boolean>>({});
 
   const reload = useCallback(async () => {
     setMembers(await fetchMembers());
@@ -618,7 +1014,7 @@ function MembersSettings() {
   useEffect(() => {
     fetchMembers()
       .then(setMembers)
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -630,7 +1026,7 @@ function MembersSettings() {
       await fn();
       await reload();
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -641,6 +1037,37 @@ function MembersSettings() {
     if (!value) return;
     setEmail("");
     await run(() => inviteMember(value));
+  };
+
+  const changedMembers = useMemo(
+    () =>
+      members.flatMap((member) => {
+        const active = activeDrafts[member.id];
+        if (active === undefined || active === member.active) return [];
+        return [{ id: member.id, active }];
+      }),
+    [members, activeDrafts],
+  );
+
+  const saveMemberChanges = async () => {
+    if (changedMembers.length === 0) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await Promise.all(
+        changedMembers.map((member) =>
+          updateMember(member.id, { active: member.active }),
+        ),
+      );
+      setActiveDrafts({});
+      await reload();
+      setMessage("Member changes saved.");
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handlePasswordChange = async () => {
@@ -654,7 +1081,7 @@ function MembersSettings() {
       setNewPassword("");
       setMessage("Settings password updated.");
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -718,10 +1145,19 @@ function MembersSettings() {
           )}
           {members.map((member) => (
             <MemberRow
-              key={`${member.id}:${member.role}:${member.active}`}
+              key={`${member.id}:${member.role}`}
               member={member}
               busy={busy}
-              run={run}
+              active={activeDrafts[member.id] ?? member.active}
+              changed={
+                activeDrafts[member.id] !== undefined &&
+                activeDrafts[member.id] !== member.active
+              }
+              onActiveChange={(active) => {
+                setError("");
+                setMessage("");
+                setActiveDrafts((current) => ({ ...current, [member.id]: active }));
+              }}
             />
           ))}
         </div>
@@ -758,6 +1194,28 @@ function MembersSettings() {
           Update Password
         </button>
       </div>
+
+      <div className="fixed bottom-16 inset-x-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-3 shadow-[0_-4px_18px_rgba(0,0,0,0.08)] backdrop-blur">
+        <div className="mx-auto flex max-w-3xl items-center gap-3">
+          {message && (
+            <p className="hidden text-sm font-semibold text-emerald-700 sm:block">
+              {message}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={saveMemberChanges}
+            disabled={busy || changedMembers.length === 0}
+            className="flex-1 rounded-xl bg-rose-800 px-4 py-3 text-base font-bold text-white shadow-sm disabled:bg-stone-300 disabled:text-stone-600"
+          >
+            {busy
+              ? "Saving..."
+              : changedMembers.length > 0
+                ? `Save (${changedMembers.length} changes)`
+                : "No changes"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -765,21 +1223,29 @@ function MembersSettings() {
 function MemberRow({
   member,
   busy,
-  run,
+  active,
+  changed,
+  onActiveChange,
 }: {
   member: StoreMember;
   busy: boolean;
-  run: (fn: () => Promise<unknown>) => Promise<void>;
+  active: boolean;
+  changed: boolean;
+  onActiveChange: (active: boolean) => void;
 }) {
   const locked = busy || member.isCurrentUser;
 
   return (
-    <div className="grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <div
+      className={`grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${
+        changed ? "bg-rose-50/40" : ""
+      }`}
+    >
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <p
             className={`truncate text-base font-semibold ${
-              member.active ? "text-stone-800" : "text-stone-400 line-through"
+              active ? "text-stone-800" : "text-stone-400 line-through"
             }`}
           >
             {member.email}
@@ -791,24 +1257,24 @@ function MemberRow({
           )}
         </div>
         <p className="text-xs text-stone-400">
-          {member.active ? "Active" : "Inactive"}
+          {active ? "Active" : "Inactive"}
         </p>
       </div>
 
       <button
         type="button"
-        onClick={() => run(() => updateMember(member.id, { active: !member.active }))}
+        onClick={() => onActiveChange(!active)}
         disabled={locked}
         className={`relative h-8 w-14 rounded-full transition-colors disabled:opacity-40 ${
-          member.active ? "bg-emerald-500" : "bg-stone-300"
+          active ? "bg-emerald-500" : "bg-stone-300"
         }`}
         role="switch"
-        aria-checked={member.active}
-        aria-label={`${member.email} ${member.active ? "Active" : "Inactive"}`}
+        aria-checked={active}
+        aria-label={`${member.email} ${active ? "Active" : "Inactive"}`}
       >
         <span
           className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
-            member.active ? "translate-x-6" : "translate-x-1"
+            active ? "translate-x-6" : "translate-x-1"
           }`}
         />
       </button>
@@ -829,10 +1295,6 @@ function PriceChanges({
 }) {
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        Current Price updates affect amount calculations. Price history will be
-        added in the next improvement.
-      </div>
       {cats.map((cat) => (
         <details
           key={cat.id}
@@ -888,16 +1350,24 @@ function ProductCategoryCard({
   cat,
   busy,
   drafts,
+  activeDrafts,
   onProductNameChange,
+  onProductActiveChange,
   run,
 }: {
   cat: AdminCategory;
   busy: boolean;
   drafts: Record<string, string>;
+  activeDrafts: Record<string, boolean>;
   onProductNameChange: (id: string, value: string) => void;
+  onProductActiveChange: (id: string, active: boolean) => void;
   run: (fn: () => Promise<unknown>) => Promise<void>;
 }) {
   const [newItem, setNewItem] = useState("");
+  const isActive = (item: AdminCategory["items"][number]) =>
+    activeDrafts[item.id] ?? item.active;
+  const activeItems = cat.items.filter((item) => item.active);
+  const inactiveItems = cat.items.filter((item) => !item.active);
 
   const addItem = async () => {
     const n = newItem.trim();
@@ -921,23 +1391,26 @@ function ProductCategoryCard({
       </summary>
 
       <div className="divide-y divide-stone-100">
-        {cat.items.length === 0 && (
+        {activeItems.length === 0 && (
           <p className="px-3 py-3 text-sm text-stone-400">
-            No menu items.
+            No active menu items.
           </p>
         )}
-        {cat.items.map((it) => (
+        {activeItems.map((it) => (
           <ProductRow
             key={it.id}
             item={it}
             busy={busy}
             value={drafts[it.id] ?? it.name}
             changed={
-              drafts[it.id] !== undefined && drafts[it.id].trim() !== it.name
+              (drafts[it.id] !== undefined && drafts[it.id].trim() !== it.name) ||
+              (activeDrafts[it.id] !== undefined &&
+                activeDrafts[it.id] !== it.active)
             }
             invalid={drafts[it.id] !== undefined && !drafts[it.id].trim()}
             onNameChange={(value) => onProductNameChange(it.id, value)}
-            run={run}
+            active={isActive(it)}
+            onActiveChange={(active) => onProductActiveChange(it.id, active)}
           />
         ))}
       </div>
@@ -958,20 +1431,54 @@ function ProductCategoryCard({
           Add
         </button>
       </div>
+
+      {inactiveItems.length > 0 && (
+        <div className="border-t border-stone-200 bg-stone-50/70">
+          <p className="px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-stone-400">
+            Hidden Products
+          </p>
+          <div className="divide-y divide-stone-100">
+            {inactiveItems.map((it) => (
+              <ProductRow
+                key={it.id}
+                item={it}
+                busy={busy}
+                value={drafts[it.id] ?? it.name}
+                changed={
+                  (drafts[it.id] !== undefined &&
+                    drafts[it.id].trim() !== it.name) ||
+                  (activeDrafts[it.id] !== undefined &&
+                    activeDrafts[it.id] !== it.active)
+                }
+                invalid={drafts[it.id] !== undefined && !drafts[it.id].trim()}
+                onNameChange={(value) => onProductNameChange(it.id, value)}
+                active={isActive(it)}
+                onActiveChange={(active) => onProductActiveChange(it.id, active)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </details>
   );
 }
 
 function CategorySettingsCard({
   cat,
+  busy,
   value,
+  active,
   changed,
   onChange,
+  onActiveChange,
 }: {
   cat: AdminCategory;
+  busy: boolean;
   value: string;
+  active: boolean;
   changed: boolean;
   onChange: (value: string) => void;
+  onActiveChange: (active: boolean) => void;
 }) {
   const invalid = !value.trim();
 
@@ -985,13 +1492,33 @@ function CategorySettingsCard({
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          disabled={busy}
           className={`flex-1 rounded border px-2 py-1 text-base font-bold ${
             invalid ? "border-red-300 bg-red-50" : "border-stone-300"
-          }`}
+          } ${active ? "text-stone-800" : "text-stone-400 line-through"}`}
           aria-label={`${cat.name} category name`}
         />
         <span className="text-xs text-stone-400">{cat.items.length} items</span>
+        <button
+          onClick={() => onActiveChange(!active)}
+          disabled={busy}
+          className={`relative h-8 w-14 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
+            active ? "bg-emerald-500" : "bg-stone-300"
+          }`}
+          role="switch"
+          aria-checked={active}
+          aria-label={`${cat.name} ${active ? "Active" : "Inactive"}`}
+        >
+          <span
+            className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+              active ? "translate-x-6" : "translate-x-1"
+            }`}
+          />
+        </button>
       </div>
+      <p className="mt-1 text-xs text-stone-400">
+        {active ? "Active" : "Inactive"}
+      </p>
       {changed && (
         <p className="mt-1 text-xs font-semibold text-rose-700">
           Pending change
@@ -1008,7 +1535,8 @@ function ProductRow({
   changed,
   invalid,
   onNameChange,
-  run,
+  active,
+  onActiveChange,
 }: {
   item: AdminCategory["items"][number];
   busy: boolean;
@@ -1016,7 +1544,8 @@ function ProductRow({
   changed: boolean;
   invalid: boolean;
   onNameChange: (value: string) => void;
-  run: (fn: () => Promise<unknown>) => Promise<void>;
+  active: boolean;
+  onActiveChange: (active: boolean) => void;
 }) {
   return (
     <div
@@ -1030,25 +1559,25 @@ function ProductRow({
         disabled={busy}
         className={`min-w-0 flex-1 rounded border px-2 py-1 text-base disabled:bg-stone-100 ${
           invalid ? "border-red-300 bg-red-50" : "border-stone-300"
-        } ${item.active ? "text-stone-800" : "text-stone-400 line-through"}`}
+        } ${active ? "text-stone-800" : "text-stone-400 line-through"}`}
         aria-label={`${item.name} product name`}
       />
 
       <button
-        onClick={() => run(() => updateItem(item.id, { active: !item.active }))}
+        onClick={() => onActiveChange(!active)}
         disabled={busy}
         className={`relative h-8 w-14 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
-          item.active
+          active
             ? "bg-emerald-500"
             : "bg-stone-300"
         }`}
         role="switch"
-        aria-checked={item.active}
-        aria-label={`${item.name} ${item.active ? "Active" : "Inactive"}`}
+        aria-checked={active}
+        aria-label={`${item.name} ${active ? "Active" : "Inactive"}`}
       >
         <span
           className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
-            item.active ? "translate-x-6" : "translate-x-1"
+            active ? "translate-x-6" : "translate-x-1"
           }`}
         />
       </button>

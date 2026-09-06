@@ -5,7 +5,7 @@ import {
   requireSettingsAccess,
 } from "@/lib/auth";
 
-// カテゴリ更新 body: { name?, sortOrder? }
+// カテゴリ更新 body: { name?, active?, sortOrder? }
 export async function PATCH(
   request: Request,
   ctx: RouteContext<"/api/categories/[id]">,
@@ -14,17 +14,18 @@ export async function PATCH(
     const context = await getCurrentStoreContext();
     await requireSettingsAccess(context);
     const { id } = await ctx.params;
-    let body: { name?: string; sortOrder?: number };
+    let body: { name?: string; active?: boolean; sortOrder?: number };
     try {
       body = await request.json();
     } catch {
       return Response.json({ error: "invalid json" }, { status: 400 });
     }
 
-    const data: { name?: string; sortOrder?: number } = {};
+    const data: { name?: string; active?: boolean; sortOrder?: number } = {};
     if (typeof body.name === "string" && body.name.trim()) {
       data.name = body.name.trim();
     }
+    if (typeof body.active === "boolean") data.active = body.active;
     if (typeof body.sortOrder === "number") {
       data.sortOrder = body.sortOrder;
     }

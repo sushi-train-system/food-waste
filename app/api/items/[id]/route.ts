@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { todayStr } from "@/lib/config";
 import {
   authErrorResponse,
   getCurrentStoreContext,
@@ -52,7 +53,30 @@ export async function PATCH(
       return Response.json({ error: "menu item not found" }, { status: 404 });
     }
 
-    const updated = await prisma.menuItem.update({ where: { id }, data });
+    const newPriceAud = data.priceAud;
+    const priceChanged =
+      typeof newPriceAud === "number" && newPriceAud !== existing.priceAud;
+    const updated = await prisma.$transaction(async (tx) => {
+      const item = await tx.menuItem.update({ where: { id }, data });
+      if (priceChanged) {
+        await tx.menuItemPriceHistory.upsert({
+          where: {
+            menuItemId_effectiveFrom: {
+              menuItemId: id,
+              effectiveFrom: todayStr(),
+            },
+          },
+          update: { priceAud: newPriceAud },
+          create: {
+            storeId: context.store.id,
+            menuItemId: id,
+            priceAud: newPriceAud,
+            effectiveFrom: todayStr(),
+          },
+        });
+      }
+      return item;
+    });
     return Response.json(updated);
   } catch (error) {
     return authErrorResponse(error);

@@ -12,6 +12,7 @@ export type CategoryDTO = {
   slug: string;
   name: string;
   sortOrder: number;
+  active: boolean;
   items: MenuItemDTO[];
 };
 
@@ -29,6 +30,7 @@ export type AdminCategory = {
   slug: string;
   name: string;
   sortOrder: number;
+  active: boolean;
   items: AdminMenuItem[];
 };
 
@@ -68,6 +70,7 @@ export type TimeSlotDTO = {
   id: string;
   startHour: number;
   sortOrder: number;
+  active: boolean;
 };
 
 export type EntryDTO = {
@@ -92,6 +95,8 @@ export type RawRow = {
   priceAud: number;
   amount: number;
 };
+
+export type DataPriceMode = "entry" | "monthEnd";
 
 /// 日次集計: 商品別内訳
 export type ItemBreakdown = {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchData } from "@/lib/api";
+import { errorMessage, fetchData } from "@/lib/api";
 import MonthPicker from "./MonthPicker";
 import {
   formatAud,
@@ -10,7 +10,7 @@ import {
   slotLabel,
   todayStr,
 } from "@/lib/config";
-import type { RawRow } from "@/lib/types";
+import type { DataPriceMode, RawRow } from "@/lib/types";
 
 function csvCell(value: string | number) {
   const s = String(value);
@@ -46,6 +46,7 @@ function rawGroupLabels(rows: RawRow[], index: number) {
 
 export default function DataTab() {
   const [month, setMonth] = useState(() => monthValue());
+  const [priceMode, setPriceMode] = useState<DataPriceMode>("monthEnd");
   const [rows, setRows] = useState<RawRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -53,11 +54,11 @@ export default function DataTab() {
   const range = useMemo(() => monthRangeFromValue(month), [month]);
 
   useEffect(() => {
-    fetchData("raw", range)
+    fetchData("raw", { ...range, priceMode })
       .then((res) => setRows(res.rows as RawRow[]))
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [range]);
+  }, [range, priceMode]);
 
   const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
   const totalAmount = rows.reduce((sum, row) => sum + row.amount, 0);
@@ -92,7 +93,7 @@ export default function DataTab() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `sushi-waste-2hour-${month}.csv`;
+    a.download = `sushi-waste-2hour-${month}-${priceMode}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -118,6 +119,28 @@ export default function DataTab() {
           >
             CSV
           </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 rounded-xl border border-stone-200 bg-white p-1">
+          <PriceModeButton
+            active={priceMode === "monthEnd"}
+            onClick={() => {
+              setLoading(true);
+              setError("");
+              setPriceMode("monthEnd");
+            }}
+          >
+            Month-end Price
+          </PriceModeButton>
+          <PriceModeButton
+            active={priceMode === "entry"}
+            onClick={() => {
+              setLoading(true);
+              setError("");
+              setPriceMode("entry");
+            }}
+          >
+            Input Price
+          </PriceModeButton>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2">
           <span className="text-xs text-stone-500">
@@ -187,6 +210,28 @@ export default function DataTab() {
         </div>
       )}
     </div>
+  );
+}
+
+function PriceModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+        active ? "bg-rose-800 text-white" : "text-stone-600 hover:bg-stone-100"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

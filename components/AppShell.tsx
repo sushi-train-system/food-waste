@@ -5,7 +5,7 @@ import InputTab from "./InputTab";
 import AnalyticsTab from "./AnalyticsTab";
 import DataTab from "./DataTab";
 import SettingsTab from "./SettingsTab";
-import { createStore, fetchSessionInfo } from "@/lib/api";
+import { createStore, errorMessage, fetchSessionInfo } from "@/lib/api";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { SessionInfo } from "@/lib/types";
@@ -57,6 +57,9 @@ const TITLES: Record<Tab, string> = {
 export default function AppShell() {
   const supabaseConfigured = hasSupabaseConfig();
   const [tab, setTab] = useState<Tab>("input");
+  const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(
+    () => new Set(["input"]),
+  );
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
   const [authLoading, setAuthLoading] = useState(supabaseConfigured);
   const [authError, setAuthError] = useState("");
@@ -86,7 +89,7 @@ export default function AppShell() {
       .then(async ({ data }) => {
         if (data.session) await loadSessionInfo();
       })
-      .catch((error) => setAuthError(String(error)))
+      .catch((error) => setAuthError(errorMessage(error)))
       .finally(() => setAuthLoading(false));
 
     const {
@@ -107,6 +110,7 @@ export default function AppShell() {
     await supabase.auth.signOut();
     setSessionInfo(null);
     setTab("input");
+    setVisitedTabs(new Set(["input"]));
   };
 
   if (!supabaseConfigured) {
@@ -145,6 +149,12 @@ export default function AppShell() {
 
   const visibleTabs = TABS;
   const activeTab = tab;
+  const selectTab = (nextTab: Tab) => {
+    setTab(nextTab);
+    if (nextTab !== "settings") {
+      setVisitedTabs((current) => new Set(current).add(nextTab));
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-full">
@@ -169,9 +179,21 @@ export default function AppShell() {
 
       {/* コンテンツ */}
       <main className="flex-1 pt-14">
-        {activeTab === "input" && <InputTab />}
-        {activeTab === "analytics" && <AnalyticsTab />}
-        {activeTab === "data" && <DataTab />}
+        {visitedTabs.has("input") && (
+          <div className={activeTab === "input" ? "" : "hidden"}>
+            <InputTab />
+          </div>
+        )}
+        {visitedTabs.has("analytics") && (
+          <div className={activeTab === "analytics" ? "" : "hidden"}>
+            <AnalyticsTab />
+          </div>
+        )}
+        {visitedTabs.has("data") && (
+          <div className={activeTab === "data" ? "" : "hidden"}>
+            <DataTab />
+          </div>
+        )}
         {activeTab === "settings" && <SettingsTab />}
       </main>
 
@@ -180,7 +202,7 @@ export default function AppShell() {
         {visibleTabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => selectTab(t.key)}
             className={`flex-1 flex flex-col items-center justify-center gap-0.5 ${
               activeTab === t.key ? "text-rose-800" : "text-stone-400"
             }`}
@@ -267,7 +289,7 @@ function LoginScreen({
         onError("Signed in, but failed to load your store access. Please try again.");
       }
     } catch (e) {
-      onError(e instanceof Error ? e.message : String(e));
+      onError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -360,7 +382,7 @@ function StoreSetupScreen({
       await createStore(name);
       await onCreated();
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

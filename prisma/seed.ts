@@ -284,6 +284,7 @@ async function main() {
 
   for (let c = 0; c < CATEGORIES.length; c++) {
     const cat = CATEGORIES[c];
+    const historyStart = "0001-01-01";
     const category = await prisma.category.upsert({
       where: { storeId_slug: { storeId: store.id, slug: cat.slug } },
       update: { name: cat.name, sortOrder: c },
@@ -305,14 +306,37 @@ async function main() {
           where: { id: existing.id },
           data: { sortOrder: i, active: true, priceAud: DEFAULT_PRICE_AUD },
         });
+        await prisma.menuItemPriceHistory.upsert({
+          where: {
+            menuItemId_effectiveFrom: {
+              menuItemId: existing.id,
+              effectiveFrom: historyStart,
+            },
+          },
+          update: { priceAud: DEFAULT_PRICE_AUD },
+          create: {
+            storeId: store.id,
+            menuItemId: existing.id,
+            priceAud: DEFAULT_PRICE_AUD,
+            effectiveFrom: historyStart,
+          },
+        });
       } else {
-        await prisma.menuItem.create({
+        const created = await prisma.menuItem.create({
           data: {
             storeId: store.id,
             name,
             categoryId: category.id,
             sortOrder: i,
             priceAud: DEFAULT_PRICE_AUD,
+          },
+        });
+        await prisma.menuItemPriceHistory.create({
+          data: {
+            storeId: store.id,
+            menuItemId: created.id,
+            priceAud: DEFAULT_PRICE_AUD,
+            effectiveFrom: historyStart,
           },
         });
       }

@@ -91,18 +91,27 @@ export async function POST(request: Request) {
             slug: category.slug,
             name: category.name,
             sortOrder: category.sortOrder,
+            active: category.active,
           },
         });
-        if (category.items.length > 0) {
-          await prisma.menuItem.createMany({
-            data: category.items.map((item) => ({
+        for (const item of category.items) {
+          const createdItem = await prisma.menuItem.create({
+            data: {
               storeId: store.id,
               categoryId: createdCategory.id,
               name: item.name,
               priceAud: item.priceAud,
               sortOrder: item.sortOrder,
               active: item.active,
-            })),
+            },
+          });
+          await prisma.menuItemPriceHistory.create({
+            data: {
+              storeId: store.id,
+              menuItemId: createdItem.id,
+              priceAud: item.priceAud,
+              effectiveFrom: "0001-01-01",
+            },
           });
         }
       }

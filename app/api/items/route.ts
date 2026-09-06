@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_PRICE_AUD } from "@/lib/config";
+import { DEFAULT_PRICE_AUD, todayStr } from "@/lib/config";
 import {
   authErrorResponse,
   getCurrentStoreContext,
@@ -39,17 +39,30 @@ export async function POST(request: Request) {
     });
     const sortOrder = (max._max.sortOrder ?? -1) + 1;
 
-    const item = await prisma.menuItem.create({
-      data: {
-        storeId: context.store.id,
-        name,
-        categoryId,
-        sortOrder,
-        priceAud:
-          typeof body.priceAud === "number" && body.priceAud >= 0
-            ? body.priceAud
-            : DEFAULT_PRICE_AUD,
-      },
+    const priceAud =
+      typeof body.priceAud === "number" && body.priceAud >= 0
+        ? body.priceAud
+        : DEFAULT_PRICE_AUD;
+
+    const item = await prisma.$transaction(async (tx) => {
+      const created = await tx.menuItem.create({
+        data: {
+          storeId: context.store.id,
+          name,
+          categoryId,
+          sortOrder,
+          priceAud,
+        },
+      });
+      await tx.menuItemPriceHistory.create({
+        data: {
+          storeId: context.store.id,
+          menuItemId: created.id,
+          priceAud,
+          effectiveFrom: todayStr(),
+        },
+      });
+      return created;
     });
 
     return Response.json(item, { status: 201 });

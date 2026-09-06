@@ -8,7 +8,13 @@ import {
   WEEKDAY_LABELS,
   weekdayIndexFromDate,
 } from "@/lib/config";
-import { fetchEntries, fetchMenu, fetchTimeSlots, saveEntries } from "@/lib/api";
+import {
+  errorMessage,
+  fetchEntries,
+  fetchMenu,
+  fetchTimeSlots,
+  saveEntries,
+} from "@/lib/api";
 import type { CategoryDTO, TimeSlotDTO } from "@/lib/types";
 
 /** メニュー全件を 0 で初期化し、サーバー保存値で上書きする */
@@ -44,15 +50,18 @@ export default function InputTab() {
       .then(([cats, slots]) => {
         setMenu(cats);
         setTimeSlots(slots);
-        if (cats.length > 0) setActiveCat(cats[0].slug);
+        setActiveCat(cats.find((cat) => cat.items.length > 0)?.slug ?? "");
+        setError("");
         if (slots.length > 0) {
           const startHours = slots.map((timeSlot) => timeSlot.startHour);
           setSlot((current) =>
-            startHours.includes(current) ? current : currentSlot(new Date(), startHours),
+            startHours.includes(current)
+              ? current
+              : currentSlot(new Date(), startHours),
           );
         }
       })
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -68,8 +77,11 @@ export default function InputTab() {
   const loadEntries = useCallback(() => {
     if (menu.length === 0) return;
     fetchEntries(date, slot)
-      .then((res) => applyServerEntries(res.entries))
-      .catch((e) => setError(String(e)));
+      .then((res) => {
+        applyServerEntries(res.entries);
+        setError("");
+      })
+      .catch((e) => setError(errorMessage(e)));
   }, [date, slot, menu, applyServerEntries]);
 
   useEffect(() => {
@@ -77,12 +89,15 @@ export default function InputTab() {
   }, [loadEntries]);
 
   const activeCategory = useMemo(
-    () => menu.find((c) => c.slug === activeCat),
+    () =>
+      menu.find((c) => c.slug === activeCat) ??
+      menu.find((c) => c.items.length > 0) ??
+      menu[0],
     [menu, activeCat],
   );
   const activeCategoryIndex = useMemo(
-    () => menu.findIndex((c) => c.slug === activeCat),
-    [menu, activeCat],
+    () => menu.findIndex((c) => c.slug === activeCategory?.slug),
+    [menu, activeCategory],
   );
 
   const categoryTotal = (cat: CategoryDTO) =>
@@ -152,7 +167,7 @@ export default function InputTab() {
       setMessage("Saved");
       setTimeout(() => setMessage(""), 2500);
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -210,7 +225,7 @@ export default function InputTab() {
                 key={c.slug}
                 onClick={() => setActiveCat(c.slug)}
                 className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                  activeCat === c.slug
+                  activeCategory?.slug === c.slug
                     ? "bg-stone-900 text-white"
                     : "bg-white text-stone-700 border border-stone-200"
                 }`}
@@ -218,7 +233,7 @@ export default function InputTab() {
                 {c.name}
                 <span
                   className={`ml-1.5 rounded-full px-1.5 py-0.5 text-xs tabular-nums ${
-                    activeCat === c.slug
+                    activeCategory?.slug === c.slug
                       ? "bg-white/25"
                       : t > 0
                         ? "bg-rose-100 text-rose-800"
@@ -238,6 +253,16 @@ export default function InputTab() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        {activeCategory && activeCategory.items.length === 0 && (
+          <p className="rounded-xl border border-stone-200 bg-white p-6 text-center text-sm text-stone-500">
+            No active products in this category.
+          </p>
+        )}
+        {!activeCategory && (
+          <p className="rounded-xl border border-stone-200 bg-white p-6 text-center text-sm text-stone-500">
+            No active products are available. Please check Menu Settings.
+          </p>
+        )}
         {activeCategory?.items.map((it) => {
           const q = quantities[it.id] ?? 0;
           const changed = isChanged(it.id);
