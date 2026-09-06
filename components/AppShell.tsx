@@ -84,13 +84,34 @@ export default function AppShell() {
   useEffect(() => {
     if (!supabase) return;
 
-    supabase.auth
-      .getSession()
-      .then(async ({ data }) => {
+    let cancelled = false;
+
+    const initializeAuth = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          params.delete("code");
+          const nextQuery = params.toString();
+          const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
+          window.history.replaceState(null, "", nextUrl);
+
+          if (error) throw error;
+        }
+
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) return;
         if (data.session) await loadSessionInfo();
-      })
-      .catch((error) => setAuthError(errorMessage(error)))
-      .finally(() => setAuthLoading(false));
+      } catch (error) {
+        if (!cancelled) setAuthError(errorMessage(error));
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    };
+
+    void initializeAuth();
 
     const {
       data: { subscription },
@@ -102,7 +123,10 @@ export default function AppShell() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, [supabase]);
 
   const handleSignOut = async () => {
@@ -268,10 +292,14 @@ function LoginScreen({
         email: email.trim().toLowerCase(),
         password,
       };
+      const emailRedirectTo = window.location.origin;
       const result =
         mode === "sign-in"
           ? await supabase.auth.signInWithPassword(credentials)
-          : await supabase.auth.signUp(credentials);
+          : await supabase.auth.signUp({
+              ...credentials,
+              options: { emailRedirectTo },
+            });
 
       if (result.error) {
         onError(result.error.message);
