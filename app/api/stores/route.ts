@@ -73,15 +73,26 @@ export async function POST(request: Request) {
       },
     });
 
-    const templateStore = await prisma.store.findUnique({
-      where: { slug: DEFAULT_STORE_SLUG },
-      include: {
-        categories: {
-          orderBy: { sortOrder: "asc" },
-          include: { items: { orderBy: { sortOrder: "asc" } } },
+    const templateStore =
+      (await prisma.store.findUnique({
+        where: { slug: DEFAULT_STORE_SLUG },
+        include: {
+          categories: {
+            orderBy: { sortOrder: "asc" },
+            include: { items: { orderBy: { sortOrder: "asc" } } },
+          },
         },
-      },
-    });
+      })) ??
+      (await prisma.store.findFirst({
+        where: { categories: { some: {} } },
+        orderBy: { createdAt: "asc" },
+        include: {
+          categories: {
+            orderBy: { sortOrder: "asc" },
+            include: { items: { orderBy: { sortOrder: "asc" } } },
+          },
+        },
+      }));
 
     if (templateStore && templateStore.id !== store.id) {
       for (const category of templateStore.categories) {

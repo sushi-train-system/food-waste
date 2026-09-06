@@ -94,8 +94,10 @@ export function recentRange(
 export const DEFAULT_PRICE_AUD = 5;
 
 /// 試験運用で使うデフォルト店舗。将来はログイン中ユーザーや店舗選択から決める。
-export const DEFAULT_STORE_SLUG = process.env.DEFAULT_STORE_SLUG ?? "main";
-export const DEFAULT_STORE_NAME = process.env.DEFAULT_STORE_NAME ?? "Main Store";
+export const DEFAULT_STORE_SLUG =
+  process.env.DEFAULT_STORE_SLUG ?? "mt-sheridan";
+export const DEFAULT_STORE_NAME =
+  process.env.DEFAULT_STORE_NAME ?? "MT SHERIDAN";
 export const DEFAULT_STORE_TIMEZONE =
   process.env.DEFAULT_STORE_TIMEZONE ?? "Australia/Brisbane";
 
